@@ -181,31 +181,6 @@
     </nav>
   </header>
 
-  <!-- ===== Admin Password Modal (for non-admin Google users) ===== -->
-  <div id="admin-login-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay">
-    <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-sm mx-4 fade-in border-2 border-amber-100">
-      <div class="text-center mb-8">
-        <div class="w-14 h-14 bg-amber-100 rounded-lg flex items-center justify-center mx-auto mb-3">
-          <i data-lucide="lock" style="width:28px;height:28px;color:#d97706;"></i>
-        </div>
-        <h3 class="font-bold text-gray-800 text-xl">เข้าสู่หน้าแอดมิน</h3>
-        <p class="text-xs text-gray-500 mt-2">บัญชีของคุณไม่มีสิทธิ์แอดมิน<br>กรุณาใส่รหัสผ่านช่างเทคนิค</p>
-      </div>
-      <div>
-        <label class="block text-sm font-semibold text-gray-800 mb-2">🔐 รหัสผ่านช่างเทคนิค</label>
-        <input id="admin-pass-input" type="password" placeholder="••••••••"
-          class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all"
-          onkeydown="if(event.key==='Enter') handleAdminPassword()">
-        <div id="login-error" class="text-sm text-red-600 hidden text-center font-medium mt-3">⚠️ รหัสผ่านไม่ถูกต้อง</div>
-      </div>
-      <button onclick="handleAdminPassword()"
-        class="w-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold py-3 rounded-lg transition-all text-base mt-6 shadow-lg">
-        เข้าสู่ระบบ
-      </button>
-      <button onclick="closeAdminModal()" class="w-full mt-3 text-sm text-gray-400 hover:text-gray-600 py-2">ยกเลิก</button>
-    </div>
-  </div>
-
   <!-- ===== REQUESTER VIEW ===== -->
   <main id="view-requester" class="flex-1 max-w-7xl mx-auto w-full px-4 py-6 fade-in">
     <div class="grid lg:grid-cols-5 gap-6">
@@ -462,7 +437,6 @@
 
 <script>
 // ==================== State ====================
-const ADMIN_PASS_HASH = '2a7f129dddf1d4d4cab56b8dcdeade8da376484a874b2ffffab678ee22f357ec'; // SHA-256 of admin password
 let currentUser = null; // { name, email, picture }
 let isAdmin = false;
 let isSuperAdmin = false;    // in hardcoded ADMIN_EMAILS
@@ -627,7 +601,7 @@ window.addEventListener('load', () => {
 
 // ==================== Tab ====================
 function switchTab(tab) {
-  if (tab === 'admin' && !isAdmin) { showAdminModal(); return; }
+  if (tab === 'admin' && !isAdmin) { showToast('คุณไม่มีสิทธิ์เข้าถึงแดชบอร์ด', 'error'); return; }
   if (tab === 'settings' && !isSuperAdmin) return;
   document.getElementById('view-requester').classList.toggle('hidden', tab !== 'requester');
   document.getElementById('view-admin').classList.toggle('hidden', tab !== 'admin');
@@ -813,37 +787,6 @@ function generateRepairReport(id) {
   w.document.close();
 }
 
-// ==================== Admin Password Modal ====================
-async function hashString(str) {
-  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
-  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
-}
-
-function showAdminModal() {
-  const m = document.getElementById('admin-login-modal');
-  m.classList.remove('hidden'); m.classList.add('flex');
-  document.getElementById('login-error').classList.add('hidden');
-  document.getElementById('admin-pass-input').value = '';
-  setTimeout(() => document.getElementById('admin-pass-input').focus(), 100);
-}
-function closeAdminModal() {
-  const m = document.getElementById('admin-login-modal');
-  m.classList.add('hidden'); m.classList.remove('flex');
-}
-async function handleAdminPassword() {
-  const inputHash = await hashString(document.getElementById('admin-pass-input').value);
-  if (inputHash === ADMIN_PASS_HASH) {
-    isAdmin = true;
-    closeAdminModal();
-    document.getElementById('admin-badge').classList.remove('hidden');
-    document.getElementById('admin-badge').classList.add('flex');
-    switchTab('admin');
-    showToast('เข้าสู่ระบบแอดมินสำเร็จ', 'success');
-  } else {
-    document.getElementById('login-error').classList.remove('hidden');
-    document.getElementById('admin-pass-input').value = '';
-  }
-}
 
 // ==================== Image Preview ====================
 let imageFiles = []; // keep File refs for upload
