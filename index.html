@@ -495,7 +495,6 @@ async function apiPost(body) {
 }
 
 async function loadTickets() {
-  useSheets = APPS_SCRIPT_URL && APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL';
   if (!useSheets) {
     tickets = JSON.parse(localStorage.getItem('repair_tickets') || '[]');
     return;
@@ -567,6 +566,9 @@ function devBypass() {
 async function enterApp() {
   isSuperAdmin = ADMIN_EMAILS.includes(currentUser.email);
 
+  // Set useSheets FIRST — before any API calls that depend on it
+  useSheets = !!(APPS_SCRIPT_URL && APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL');
+
   // Hide login, show app
   const loginScreen = document.getElementById('login-screen');
   loginScreen.classList.add('hiding');
@@ -580,7 +582,7 @@ async function enterApp() {
   document.getElementById('user-email').textContent = currentUser.email;
   document.getElementById('user-name-wrap').classList.remove('hidden');
 
-  // Load dynamic admins + tech emails from Sheets
+  // Load dynamic admins + tech emails from Sheets (useSheets is now set correctly)
   await loadDynamicAdmins();
   await loadTechEmails();
 
@@ -656,7 +658,13 @@ function switchTab(tab) {
     (tab === 'settings' ? 'tab-active' : 'text-gray-500 hover:text-gray-700');
   if (tab === 'admin')    { updateStats(); renderAdminTickets(); }
   if (tab === 'requester') renderUserTickets();
-  if (tab === 'settings')  { renderAdminList(); renderTechList(); }
+  if (tab === 'settings')  {
+    renderAdminList(); renderTechList(); // show cached immediately
+    if (useSheets) {                     // then refresh from Sheets in background
+      loadDynamicAdmins().then(renderAdminList);
+      loadTechEmails().then(renderTechList);
+    }
+  }
 }
 
 // ==================== Dynamic Admin Management ====================
