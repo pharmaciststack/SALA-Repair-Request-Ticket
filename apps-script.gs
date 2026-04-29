@@ -6,7 +6,16 @@
 
 const SHEET_NAME = 'Tickets';
 
-function doGet() {
+function doGet(e) {
+  // ?action=getAdmins — return dynamic admin email list
+  if (e && e.parameter && e.parameter.action === 'getAdmins') {
+    const sheet = getAdminSheet();
+    const data  = sheet.getDataRange().getValues();
+    const admins = data.slice(1).map(r => String(r[0]).trim()).filter(Boolean);
+    return json({ ok: true, admins });
+  }
+
+  // default — return tickets
   const sheet = getSheet();
   const data  = sheet.getDataRange().getValues();
   if (data.length <= 1) return json({ ok: true, data: [] });
@@ -39,7 +48,7 @@ function doPost(e) {
 
   } else if (body.action === 'update') {
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
-    const col = (name) => headers.indexOf(name) + 1; // 1-based, returns 0 if not found
+    const col = (name) => headers.indexOf(name) + 1;
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
       if (String(rows[i][0]) === String(body.id)) {
@@ -63,6 +72,26 @@ function doPost(e) {
   } else if (body.action === 'clear') {
     const last = sheet.getLastRow();
     if (last > 1) sheet.deleteRows(2, last - 1);
+
+  // ── Admin Management ──────────────────────────────
+  } else if (body.action === 'addAdmin') {
+    const aSheet = getAdminSheet();
+    const data   = aSheet.getDataRange().getValues();
+    const existing = data.slice(1).map(r => String(r[0]).toLowerCase().trim());
+    const email = String(body.email).toLowerCase().trim();
+    if (email && !existing.includes(email)) {
+      aSheet.appendRow([body.email.trim(), new Date().toISOString()]);
+    }
+
+  } else if (body.action === 'removeAdmin') {
+    const aSheet = getAdminSheet();
+    const data   = aSheet.getDataRange().getValues();
+    for (let i = 1; i < data.length; i++) {
+      if (String(data[i][0]).toLowerCase().trim() === String(body.email).toLowerCase().trim()) {
+        aSheet.deleteRow(i + 1);
+        break;
+      }
+    }
   }
 
   return json({ ok: true });
@@ -97,6 +126,17 @@ function getSheet() {
       'equip','deviceId','category','desc','urgency',
       'status','note','createdAt','updatedAt','images'
     ]);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+function getAdminSheet() {
+  const ss    = SpreadsheetApp.getActiveSpreadsheet();
+  let   sheet = ss.getSheetByName('AdminEmails');
+  if (!sheet) {
+    sheet = ss.insertSheet('AdminEmails');
+    sheet.appendRow(['email', 'addedAt']);
     sheet.setFrozenRows(1);
   }
   return sheet;

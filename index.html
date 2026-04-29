@@ -174,6 +174,10 @@
         class="px-5 py-3 text-sm font-medium text-gray-500 border-b-3 border-transparent transition-colors flex items-center gap-2">
         <i data-lucide="layout-dashboard" style="width:16px;height:16px;"></i> แดชบอร์ด
       </button>
+      <button onclick="switchTab('settings')" id="tab-settings"
+        class="hidden px-5 py-3 text-sm font-medium text-gray-500 border-b-3 border-transparent transition-colors flex items-center gap-2">
+        <i data-lucide="settings" style="width:16px;height:16px;"></i> จัดการแอดมิน
+      </button>
     </nav>
   </header>
 
@@ -416,6 +420,44 @@
     <img id="img-modal-src" src="" class="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl object-contain">
   </div>
 
+  <!-- ===== SETTINGS VIEW (Super Admin only) ===== -->
+  <main id="view-settings" class="hidden flex-1 max-w-3xl mx-auto w-full px-4 py-6 fade-in">
+    <div class="bg-white rounded-xl shadow border border-gray-100 p-6">
+      <h2 class="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+        <span class="w-9 h-9 bg-purple-50 rounded-lg flex items-center justify-center">
+          <i data-lucide="users" style="width:18px;height:18px;color:#7c3aed;"></i>
+        </span>
+        จัดการแอดมิน
+      </h2>
+      <p class="text-xs text-gray-400 mb-6">Super Admin เท่านั้นที่เข้าถึงส่วนนี้ได้ · เพิ่ม/ลบ Email ที่มีสิทธิ์แอดมินแบบ Dynamic</p>
+
+      <!-- Add Admin -->
+      <div class="bg-gray-50 rounded-xl p-4 mb-6 border border-gray-200">
+        <label class="block text-sm font-semibold text-gray-700 mb-2">➕ เพิ่มแอดมินใหม่</label>
+        <div class="flex gap-2">
+          <input id="new-admin-email" type="email" placeholder="example@gmail.com"
+            class="flex-1 border-2 border-gray-200 rounded-lg px-4 py-2.5 text-sm transition-all"
+            onkeydown="if(event.key==='Enter') addAdminEmail()">
+          <button onclick="addAdminEmail()"
+            class="bg-purple-600 hover:bg-purple-700 text-white px-5 py-2.5 rounded-lg text-sm font-semibold transition-all">
+            เพิ่ม
+          </button>
+        </div>
+      </div>
+
+      <!-- Admin List -->
+      <div>
+        <p class="text-sm font-semibold text-gray-700 mb-3">📋 รายชื่อแอดมิน (Dynamic)</p>
+        <div id="admin-email-list" class="space-y-2"></div>
+      </div>
+
+      <div class="mt-6 pt-4 border-t border-gray-100">
+        <p class="text-xs text-gray-400">⭐ Super Admin (กำหนดในโค้ด ลบไม่ได้):</p>
+        <div class="mt-2 flex flex-wrap gap-2" id="super-admin-list"></div>
+      </div>
+    </div>
+  </main>
+
 </div><!-- #app -->
 
 <script>
@@ -423,6 +465,8 @@
 const ADMIN_PASS_HASH = '2a7f129dddf1d4d4cab56b8dcdeade8da376484a874b2ffffab678ee22f357ec'; // SHA-256 of admin password
 let currentUser = null; // { name, email, picture }
 let isAdmin = false;
+let isSuperAdmin = false;    // in hardcoded ADMIN_EMAILS
+let dynamicAdmins = [];      // emails loaded from Sheets AdminEmails tab
 let tickets = [];
 let imageDataURLs = [];
 let useSheets = false;
@@ -509,7 +553,7 @@ function devBypass() {
 }
 
 async function enterApp() {
-  isAdmin = ADMIN_EMAILS.includes(currentUser.email);
+  isSuperAdmin = ADMIN_EMAILS.includes(currentUser.email);
 
   // Hide login, show app
   const loginScreen = document.getElementById('login-screen');
@@ -524,9 +568,20 @@ async function enterApp() {
   document.getElementById('user-email').textContent = currentUser.email;
   document.getElementById('user-name-wrap').classList.remove('hidden');
 
+  // Load dynamic admins from Sheets
+  await loadDynamicAdmins();
+
+  // isAdmin = super admin OR in dynamic list
+  isAdmin = isSuperAdmin || dynamicAdmins.map(e=>e.toLowerCase()).includes(currentUser.email.toLowerCase());
+
   if (isAdmin) {
     document.getElementById('admin-badge').classList.remove('hidden');
     document.getElementById('admin-badge').classList.add('flex');
+  }
+  // Show settings tab for super admins only
+  if (isSuperAdmin) {
+    document.getElementById('tab-settings').classList.remove('hidden');
+    document.getElementById('tab-settings').classList.add('flex');
   }
 
   // Pre-fill form
@@ -544,6 +599,8 @@ function handleSignOut() {
   sessionStorage.removeItem('repair_user');
   currentUser = null;
   isAdmin = false;
+  isSuperAdmin = false;
+  dynamicAdmins = [];
   document.getElementById('login-screen').style.display = '';
   document.getElementById('login-screen').classList.remove('hiding');
   document.getElementById('app').style.setProperty('display', 'none', 'important');
@@ -571,16 +628,189 @@ window.addEventListener('load', () => {
 // ==================== Tab ====================
 function switchTab(tab) {
   if (tab === 'admin' && !isAdmin) { showAdminModal(); return; }
+  if (tab === 'settings' && !isSuperAdmin) return;
   document.getElementById('view-requester').classList.toggle('hidden', tab !== 'requester');
   document.getElementById('view-admin').classList.toggle('hidden', tab !== 'admin');
-  document.getElementById('tab-requester').className =
+  document.getElementById('view-settings').classList.toggle('hidden', tab !== 'settings');
+  const tabStyle = (t) =>
     'px-5 py-3 text-sm font-medium border-b-3 border-transparent transition-colors flex items-center gap-2 ' +
-    (tab === 'requester' ? 'tab-active' : 'text-gray-500 hover:text-gray-700');
-  document.getElementById('tab-admin').className =
-    'px-5 py-3 text-sm font-medium border-b-3 border-transparent transition-colors flex items-center gap-2 ' +
-    (tab === 'admin' ? 'tab-active' : 'text-gray-500 hover:text-gray-700');
-  if (tab === 'admin') { updateStats(); renderAdminTickets(); }
+    (tab === t ? 'tab-active' : 'text-gray-500 hover:text-gray-700');
+  document.getElementById('tab-requester').className = tabStyle('requester');
+  document.getElementById('tab-admin').className     = tabStyle('admin');
+  document.getElementById('tab-settings').className  =
+    (isSuperAdmin ? 'flex' : 'hidden') + ' px-5 py-3 text-sm font-medium border-b-3 border-transparent transition-colors items-center gap-2 ' +
+    (tab === 'settings' ? 'tab-active' : 'text-gray-500 hover:text-gray-700');
+  if (tab === 'admin')    { updateStats(); renderAdminTickets(); }
   if (tab === 'requester') renderUserTickets();
+  if (tab === 'settings')  renderAdminList();
+}
+
+// ==================== Dynamic Admin Management ====================
+async function loadDynamicAdmins() {
+  if (!useSheets) return;
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?action=getAdmins&t=' + Date.now(), { redirect: 'follow' });
+    const j = await r.json();
+    dynamicAdmins = j.admins || [];
+  } catch(e) { dynamicAdmins = []; }
+}
+
+async function addAdminEmail() {
+  const input = document.getElementById('new-admin-email');
+  const email = input.value.trim().toLowerCase();
+  if (!email || !email.includes('@')) { showToast('Email ไม่ถูกต้อง', 'error'); return; }
+  if (ADMIN_EMAILS.map(e=>e.toLowerCase()).includes(email)) { showToast('Email นี้เป็น Super Admin อยู่แล้ว', 'error'); return; }
+  if (dynamicAdmins.map(e=>e.toLowerCase()).includes(email)) { showToast('มี Email นี้อยู่แล้ว', 'error'); return; }
+  if (useSheets) await apiPost({ action: 'addAdmin', email });
+  dynamicAdmins.push(email);
+  input.value = '';
+  renderAdminList();
+  showToast('เพิ่มแอดมิน ' + email + ' สำเร็จ', 'success');
+}
+
+async function removeAdminEmail(email) {
+  if (!confirm('ลบ ' + email + ' ออกจากแอดมิน?')) return;
+  if (useSheets) await apiPost({ action: 'removeAdmin', email });
+  dynamicAdmins = dynamicAdmins.filter(e => e.toLowerCase() !== email.toLowerCase());
+  renderAdminList();
+  showToast('ลบ ' + email + ' แล้ว', 'error');
+}
+
+function renderAdminList() {
+  const container = document.getElementById('admin-email-list');
+  if (!container) return;
+  if (!dynamicAdmins.length) {
+    container.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">ยังไม่มี Dynamic Admin</p>';
+  } else {
+    container.innerHTML = dynamicAdmins.map(email => `
+      <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-2.5">
+        <div class="flex items-center gap-2">
+          <i data-lucide="user-check" style="width:14px;height:14px;color:#7c3aed;"></i>
+          <span class="text-sm text-gray-700">${escHtml(email)}</span>
+        </div>
+        <button onclick="removeAdminEmail('${escHtml(email)}')"
+          class="text-xs text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-2.5 py-1 rounded-lg transition-all flex items-center gap-1">
+          <i data-lucide="trash-2" style="width:12px;height:12px;"></i> ลบ
+        </button>
+      </div>`).join('');
+  }
+  // Super admin list
+  const sup = document.getElementById('super-admin-list');
+  if (sup) {
+    sup.innerHTML = ADMIN_EMAILS.map(e =>
+      `<span class="text-xs bg-purple-100 text-purple-700 px-3 py-1 rounded-full font-medium">⭐ ${escHtml(e)}</span>`
+    ).join('');
+  }
+  lucide.createIcons();
+}
+
+// ==================== PDF Report ====================
+function generateRepairReport(id) {
+  const t = tickets.find(t => String(t.id) === String(id));
+  if (!t) return;
+  const w = window.open('', '_blank', 'width=800,height=900');
+  const completedDate = t.updatedAt ? formatDate(t.updatedAt) : '-';
+  const imagesHtml = (t.images||[]).map(url =>
+    `<img src="${url}" style="width:160px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;">`
+  ).join('');
+  w.document.write(`<!doctype html><html lang="th"><head>
+  <meta charset="UTF-8">
+  <title>รายงานซ่อมบำรุง #${String(t.id).slice(-8)}</title>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@400;600;700;800&display=swap" rel="stylesheet">
+  <style>
+    *{font-family:'Noto Sans Thai',sans-serif;box-sizing:border-box;margin:0;padding:0}
+    body{background:#fff;padding:32px;color:#111;font-size:13px;line-height:1.6}
+    .header{display:flex;align-items:center;gap:16px;border-bottom:3px solid #f59e0b;padding-bottom:16px;margin-bottom:24px}
+    .logo{width:56px;height:56px;object-fit:contain}
+    .company{flex:1}
+    .company h1{font-size:18px;font-weight:800;color:#1a1a1a}
+    .company p{font-size:11px;color:#666}
+    .doc-info{text-align:right}
+    .doc-info .doc-id{font-size:20px;font-weight:700;color:#f59e0b}
+    .doc-info .doc-date{font-size:11px;color:#666}
+    .title-bar{background:#f59e0b;color:#fff;text-align:center;padding:10px;border-radius:8px;font-size:16px;font-weight:700;margin-bottom:20px}
+    .grid2{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-bottom:16px}
+    .card{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px}
+    .card h3{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:8px;letter-spacing:.5px}
+    .row{display:flex;gap:6px;margin-bottom:4px;font-size:13px}
+    .row .lbl{color:#6b7280;min-width:110px;font-size:12px}
+    .row .val{font-weight:600;color:#111}
+    .badge{display:inline-block;padding:2px 10px;border-radius:20px;font-size:11px;font-weight:700}
+    .badge-high{background:#fee2e2;color:#991b1b}
+    .badge-medium{background:#fef3c7;color:#92400e}
+    .badge-low{background:#d1fae5;color:#065f46}
+    .desc-box{background:#f9fafb;border:1px solid #e5e7eb;border-radius:8px;padding:14px;margin-bottom:16px}
+    .desc-box h3{font-size:11px;font-weight:700;color:#6b7280;text-transform:uppercase;margin-bottom:8px;letter-spacing:.5px}
+    .desc-box p{font-size:13px;color:#374151}
+    .images{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px}
+    .note-box{background:#eff6ff;border:1px solid #bfdbfe;border-radius:8px;padding:14px;margin-bottom:20px}
+    .note-box h3{font-size:11px;font-weight:700;color:#1d4ed8;text-transform:uppercase;margin-bottom:6px;letter-spacing:.5px}
+    .note-box p{font-size:13px;color:#1e3a8a}
+    .sig-grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:16px;margin-top:24px}
+    .sig-box{border-top:2px solid #d1d5db;padding-top:10px;text-align:center}
+    .sig-box .sig-line{height:48px}
+    .sig-box .sig-name{font-size:11px;color:#6b7280;margin-top:4px}
+    .footer{text-align:center;font-size:10px;color:#9ca3af;margin-top:24px;padding-top:12px;border-top:1px solid #e5e7eb}
+    .status-done{background:#d1fae5;color:#065f46}
+    @media print{body{padding:16px}button{display:none}}
+  </style></head><body>
+  <div class="header">
+    <img class="logo" src="https://img1.pic.in.th/images/logo--1.png" onerror="this.style.display='none'">
+    <div class="company">
+      <h1>บริษัท ศาลาโอสถรีเทล จำกัด</h1>
+      <p>ระบบแจ้งซ่อมบำรุง · Repair Management System</p>
+    </div>
+    <div class="doc-info">
+      <div class="doc-id">#${String(t.id).slice(-8)}</div>
+      <div class="doc-date">พิมพ์: ${formatDate(new Date().toISOString())}</div>
+    </div>
+  </div>
+  <div class="title-bar">📋 รายงานการซ่อมบำรุง (Repair Completion Report)</div>
+  <div class="grid2">
+    <div class="card">
+      <h3>👤 ข้อมูลผู้แจ้ง</h3>
+      <div class="row"><span class="lbl">ชื่อ:</span><span class="val">${t.name||'-'}</span></div>
+      <div class="row"><span class="lbl">อีเมล:</span><span class="val">${t.email||'-'}</span></div>
+      <div class="row"><span class="lbl">สาขา:</span><span class="val">${t.branch||'-'}</span></div>
+      <div class="row"><span class="lbl">เบอร์ติดต่อ:</span><span class="val">${t.phone||'-'}</span></div>
+    </div>
+    <div class="card">
+      <h3>🔧 ข้อมูลอุปกรณ์</h3>
+      <div class="row"><span class="lbl">อุปกรณ์:</span><span class="val">${t.equip||'-'}</span></div>
+      ${t.deviceId?`<div class="row"><span class="lbl">รหัสอุปกรณ์:</span><span class="val">${t.deviceId}</span></div>`:''}
+      <div class="row"><span class="lbl">หมวดหมู่:</span><span class="val">${{electrical:'⚡ ไฟฟ้า',plumbing:'🚿 ประปา',ac:'❄️ แอร์',computer:'💻 IT',furniture:'🪑 เฟอร์นิเจอร์',other:'🔩 อื่นๆ'}[t.category]||t.category}</span></div>
+      <div class="row"><span class="lbl">ความเร่งด่วน:</span><span class="val"><span class="badge badge-${t.urgency}">${{low:'🟢 ต่ำ',medium:'🟡 ปานกลาง',high:'🔴 ด่วนมาก'}[t.urgency]||t.urgency}</span></span></div>
+    </div>
+  </div>
+  <div class="grid2">
+    <div class="card">
+      <h3>📅 วันที่</h3>
+      <div class="row"><span class="lbl">วันที่แจ้ง:</span><span class="val">${formatDate(t.createdAt)}</span></div>
+      <div class="row"><span class="lbl">วันที่เสร็จ:</span><span class="val">${completedDate}</span></div>
+    </div>
+    <div class="card">
+      <h3>📌 สถานะ</h3>
+      <div class="row"><span class="lbl">สถานะ:</span><span class="val"><span class="badge status-done">✅ เสร็จสิ้น</span></span></div>
+    </div>
+  </div>
+  <div class="desc-box">
+    <h3>📝 รายละเอียดปัญหา</h3>
+    <p>${(t.desc||'-').replace(/\n/g,'<br>')}</p>
+  </div>
+  ${imagesHtml ? `<div class="desc-box"><h3>📸 รูปภาพประกอบ</h3><div class="images">${imagesHtml}</div></div>` : ''}
+  <div class="note-box">
+    <h3>💬 หมายเหตุช่าง / วิธีแก้ไข</h3>
+    <p>${(t.note||'ไม่มีหมายเหตุ').replace(/\n/g,'<br>')}</p>
+  </div>
+  <div class="sig-grid">
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นผู้แจ้ง<br>(${t.name||''})</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นช่างเทคนิค</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นผู้อนุมัติ</div></div>
+  </div>
+  <div class="footer">เอกสารนี้สร้างโดยระบบแจ้งซ่อมบำรุง บริษัท ศาลาโอสถรีเทล จำกัด · เลขที่เอกสาร: ${String(t.id).slice(-8)}</div>
+  <br><div style="text-align:center"><button onclick="window.print()" style="background:#f59e0b;color:#fff;border:none;padding:10px 28px;border-radius:8px;font-size:14px;font-weight:700;cursor:pointer;font-family:'Noto Sans Thai',sans-serif;">🖨️ พิมพ์ / บันทึก PDF</button></div>
+</body></html>`);
+  w.document.close();
 }
 
 // ==================== Admin Password Modal ====================
@@ -838,6 +1068,11 @@ function renderAdminTickets() {
               class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all">บันทึก</button>
           </div>
         </div>
+        ${t.status === 'done' ? `
+        <button onclick="generateRepairReport(${t.id})"
+          class="flex items-center gap-1 text-sm text-amber-600 hover:text-amber-700 border-2 border-amber-200 hover:border-amber-400 bg-amber-50 hover:bg-amber-100 px-3 py-2 rounded-lg transition-all font-medium">
+          <i data-lucide="file-text" style="width:14px;height:14px;"></i> PDF
+        </button>` : ''}
         <button onclick="deleteTicket(${t.id})"
           class="flex items-center gap-1 text-sm text-red-400 hover:text-red-600 border-2 border-red-100 hover:border-red-300 px-3 py-2 rounded-lg transition-all">
           <i data-lucide="trash-2" style="width:14px;height:14px;"></i> ลบ
