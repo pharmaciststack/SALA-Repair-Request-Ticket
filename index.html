@@ -400,7 +400,7 @@
 
 <script>
 // ==================== State ====================
-const ADMIN_PASS = 'IT1234';
+const ADMIN_PASS_HASH = '2a7f129dddf1d4d4cab56b8dcdeade8da376484a874b2ffffab678ee22f357ec'; // SHA-256 of admin password
 let currentUser = null; // { name, email, picture }
 let isAdmin = false;
 let tickets = [];
@@ -564,6 +564,11 @@ function switchTab(tab) {
 }
 
 // ==================== Admin Password Modal ====================
+async function hashString(str) {
+  const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(str));
+  return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2,'0')).join('');
+}
+
 function showAdminModal() {
   const m = document.getElementById('admin-login-modal');
   m.classList.remove('hidden'); m.classList.add('flex');
@@ -575,8 +580,9 @@ function closeAdminModal() {
   const m = document.getElementById('admin-login-modal');
   m.classList.add('hidden'); m.classList.remove('flex');
 }
-function handleAdminPassword() {
-  if (document.getElementById('admin-pass-input').value === ADMIN_PASS) {
+async function handleAdminPassword() {
+  const inputHash = await hashString(document.getElementById('admin-pass-input').value);
+  if (inputHash === ADMIN_PASS_HASH) {
     isAdmin = true;
     closeAdminModal();
     document.getElementById('admin-badge').classList.remove('hidden');
