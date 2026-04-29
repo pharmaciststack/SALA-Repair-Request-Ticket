@@ -281,7 +281,8 @@
                   <div class="peer-checked:border-green-500 peer-checked:bg-green-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center transition-all duration-200">
                     <div class="text-xl">🟢</div>
                     <div class="text-sm font-bold mt-1">ต่ำ</div>
-                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">มีอุปกรณ์ทดแทนหรือใช้งานต่อได้ รอได้ &gt;7วัน</div>
+                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">มีอุปกรณ์ทดแทนหรือใช้งานต่อได้</div>
+                    <div class="text-[10px] font-semibold text-green-600 mt-0.5">(ภายใน 7-30 วัน)</div>
                   </div>
                 </label>
                 <label class="flex-1 cursor-pointer">
@@ -289,7 +290,8 @@
                   <div class="peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center transition-all duration-200">
                     <div class="text-xl">🟡</div>
                     <div class="text-sm font-bold mt-1">ปานกลาง</div>
-                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">ไม่กระทบการปฏิบัติงาน รอได้ 2-7วัน</div>
+                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">ไม่กระทบการปฏิบัติงานโดยตรง</div>
+                    <div class="text-[10px] font-semibold text-amber-600 mt-0.5">(ภายใน 2-7 วัน)</div>
                   </div>
                 </label>
                 <label class="flex-1 cursor-pointer">
@@ -297,7 +299,8 @@
                   <div class="peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center transition-all duration-200">
                     <div class="text-xl">🔴</div>
                     <div class="text-sm font-bold mt-1">ด่วนมาก</div>
-                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">กระทบการปฏิบัติงาน ต้องซ่อมใน 1-2วัน</div>
+                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">กระทบการปฏิบัติงานโดยตรง</div>
+                    <div class="text-[10px] font-semibold text-red-600 mt-0.5">(ภายใน 1-2 วัน)</div>
                   </div>
                 </label>
               </div>
@@ -331,7 +334,7 @@
 
   <!-- ===== ADMIN VIEW ===== -->
   <main id="view-admin" class="hidden flex-1 max-w-7xl mx-auto w-full px-4 py-6 fade-in">
-    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+    <div class="grid grid-cols-2 lg:grid-cols-5 gap-4 mb-6">
       <div class="bg-white rounded-xl p-4 shadow border border-gray-100 flex items-center gap-3">
         <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
           <i data-lucide="clipboard-list" style="width:20px;height:20px;color:#6b7280;"></i>
@@ -355,6 +358,13 @@
           <i data-lucide="check-circle-2" style="width:20px;height:20px;color:#16a34a;"></i>
         </div>
         <div><p class="text-xs text-gray-500">เสร็จสิ้น</p><p id="stat-done" class="text-2xl font-bold text-green-600">0</p></div>
+      </div>
+      <div class="bg-red-50 rounded-xl p-4 shadow border-2 border-red-200 flex items-center gap-3 cursor-pointer hover:bg-red-100 transition-colors"
+           onclick="document.getElementById('filter-overdue').value='overdue'; renderAdminTickets();">
+        <div class="w-10 h-10 bg-red-100 rounded-lg flex items-center justify-center">
+          <i data-lucide="alarm-clock" style="width:20px;height:20px;color:#dc2626;"></i>
+        </div>
+        <div><p class="text-xs text-red-600 font-medium">เกินกำหนด</p><p id="stat-overdue" class="text-2xl font-bold text-red-600">0</p></div>
       </div>
     </div>
 
@@ -385,6 +395,10 @@
         <option value="computer">💻 IT</option>
         <option value="furniture">🪑 เฟอร์นิเจอร์</option>
         <option value="other">🔩 อื่นๆ</option>
+      </select>
+      <select id="filter-overdue" onchange="renderAdminTickets()" class="border-2 border-red-200 rounded-lg px-3 py-2.5 text-sm bg-white text-red-700 font-medium transition-all">
+        <option value="">⏱️ ทุก ticket</option>
+        <option value="overdue">🚨 เกินกำหนดแล้ว</option>
       </select>
       <button onclick="refreshAdmin()" class="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 border-2 border-gray-200 hover:border-gray-300 px-3 py-2.5 rounded-lg transition-all">
         <i data-lucide="refresh-cw" style="width:15px;height:15px;"></i> รีเฟรช
@@ -758,11 +772,12 @@ function renderUserTickets() {
 
 // ==================== Render Admin Tickets ====================
 function renderAdminTickets() {
-  const search   = document.getElementById('admin-search').value.toLowerCase();
-  const fStatus  = document.getElementById('filter-status').value;
-  const fUrgency = document.getElementById('filter-urgency').value;
-  const fCat     = document.getElementById('filter-category').value;
-  const fBranch  = document.getElementById('filter-branch').value;
+  const search    = document.getElementById('admin-search').value.toLowerCase();
+  const fStatus   = document.getElementById('filter-status').value;
+  const fUrgency  = document.getElementById('filter-urgency').value;
+  const fCat      = document.getElementById('filter-category').value;
+  const fBranch   = document.getElementById('filter-branch').value;
+  const fOverdue  = document.getElementById('filter-overdue').value;
   const list = tickets.filter(t =>
     (!search || t.name.toLowerCase().includes(search) || t.branch.toLowerCase().includes(search) ||
       t.equip.toLowerCase().includes(search) || t.desc.toLowerCase().includes(search) ||
@@ -770,7 +785,8 @@ function renderAdminTickets() {
     (!fStatus  || t.status  === fStatus) &&
     (!fUrgency || t.urgency === fUrgency) &&
     (!fCat     || t.category === fCat) &&
-    (!fBranch  || t.branch  === fBranch));
+    (!fBranch  || t.branch  === fBranch) &&
+    (!fOverdue || isOverdue(t)));
 
   const container = document.getElementById('ticket-list-admin');
   if (!list.length) {
@@ -795,6 +811,7 @@ function renderAdminTickets() {
           <p class="text-sm text-gray-700 mt-2">${escHtml(t.desc)}</p>
         </div>
         <div class="text-right flex flex-col items-end gap-1 shrink-0">
+          ${overdueLabel(t)}
           <span class="text-xs text-gray-400">#${String(t.id).slice(-5)}</span>
           <span class="text-xs text-gray-400">${formatDate(t.createdAt)}</span>
         </div>
@@ -879,6 +896,7 @@ function updateStats() {
   document.getElementById('stat-waiting').textContent  = tickets.filter(t=>t.status==='waiting').length;
   document.getElementById('stat-progress').textContent = tickets.filter(t=>t.status==='progress').length;
   document.getElementById('stat-done').textContent     = tickets.filter(t=>t.status==='done').length;
+  document.getElementById('stat-overdue').textContent  = tickets.filter(t=>isOverdue(t)).length;
   updateBadge();
 }
 function updateBadge() {
@@ -913,7 +931,22 @@ function closeImgModal() {
 
 // ==================== Helpers ====================
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function urgencyLabel(v){ return {low:'🟢 ต่ำ',medium:'🟡 ปานกลาง',high:'🔴 ด่วนมาก'}[v]||v; }
+function urgencyLabel(v){ return {low:'🟢 ต่ำ (7-30วัน)',medium:'🟡 ปานกลาง (2-7วัน)',high:'🔴 ด่วนมาก (1-2วัน)'}[v]||v; }
+
+// overdue: ยังไม่เสร็จ + เกินเวลาตามระดับความเร่งด่วน
+const OVERDUE_DAYS = { high: 2, medium: 7, low: 30 };
+function isOverdue(t) {
+  if (t.status === 'done') return false;
+  const limit = OVERDUE_DAYS[t.urgency];
+  if (!limit || !t.createdAt) return false;
+  const diffDays = (Date.now() - new Date(t.createdAt).getTime()) / 86400000;
+  return diffDays > limit;
+}
+function overdueLabel(t) {
+  if (!isOverdue(t)) return '';
+  const days = Math.floor((Date.now() - new Date(t.createdAt).getTime()) / 86400000);
+  return `<span class="inline-flex items-center gap-1 text-[10px] font-bold bg-red-600 text-white px-2 py-0.5 rounded-full animate-pulse">🚨 เกินกำหนด ${days} วัน</span>`;
+}
 function statusLabel(v){ return {waiting:'⏳ รอดำเนินการ',progress:'🔧 กำลังดำเนินการ',done:'✅ เสร็จสิ้น'}[v]||v; }
 function categoryLabel(v){ return {electrical:'⚡ ไฟฟ้า',plumbing:'🚿 ประปา',ac:'❄️ แอร์',computer:'💻 IT',furniture:'🪑 เฟอร์นิเจอร์',other:'🔩 อื่นๆ'}[v]||v; }
 function urgencyBorder(v){ return {low:'border-green-100',medium:'border-amber-200',high:'border-red-300'}[v]||'border-gray-100'; }
