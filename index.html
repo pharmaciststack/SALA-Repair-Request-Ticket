@@ -1,0 +1,929 @@
+<!doctype html>
+<html lang="th" class="h-full">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ระบบแจ้งซ่อมบำรุง - บริษัท ศาลาโอสถรีเทล จำกัด</title>
+  <script src="https://cdn.tailwindcss.com/3.4.17"></script>
+  <script src="https://cdn.jsdelivr.net/npm/lucide@0.263.0/dist/umd/lucide.min.js"></script>
+  <script src="https://accounts.google.com/gsi/client" async></script>
+  <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+Thai:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <script>
+    tailwind.config = {
+      theme: { extend: { fontFamily: { thai: ['Noto Sans Thai', 'sans-serif'] } } }
+    }
+  </script>
+  <style>
+    html, body { height: 100%; margin: 0; }
+    * { font-family: 'Noto Sans Thai', sans-serif; }
+    .status-waiting  { background: #e5e7eb; color: #374151; }
+    .status-progress { background: #dbeafe; color: #1e40af; }
+    .status-done     { background: #d1fae5; color: #065f46; }
+    .urgency-low    { background: #d1fae5; color: #065f46; }
+    .urgency-medium { background: #fef3c7; color: #92400e; }
+    .urgency-high   { background: #fee2e2; color: #991b1b; }
+    .tab-active { border-bottom: 3px solid #f59e0b; color: #f59e0b; font-weight: 700; }
+    .fade-in { animation: fadeIn 0.3s ease; }
+    @keyframes fadeIn { from { opacity:0; transform:translateY(8px); } to { opacity:1; transform:translateY(0); } }
+    .card-hover { transition: all 0.2s; }
+    .card-hover:hover { transform: translateY(-2px); box-shadow: 0 8px 25px rgba(0,0,0,0.1); }
+    input:focus, select:focus, textarea:focus { outline: none; border-color: #f59e0b; box-shadow: 0 0 0 3px rgba(245,158,11,0.2); }
+    .modal-overlay { background: rgba(0,0,0,0.5); backdrop-filter: blur(4px); }
+    .scroll-area { overflow-y: auto; }
+    .scroll-area::-webkit-scrollbar { width: 6px; }
+    .scroll-area::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 3px; }
+    @keyframes toastIn  { from { opacity:0; transform:translateY(-20px); } to { opacity:1; transform:translateY(0); } }
+    @keyframes toastOut { from { opacity:1; } to { opacity:0; } }
+    .toast-anim { animation: toastIn 0.3s ease, toastOut 0.3s ease 2.7s forwards; }
+    .img-thumb { width:100%; height:80px; object-fit:cover; border-radius:8px; border:2px solid #e5e7eb; }
+    body { box-sizing: border-box; }
+
+    /* Login screen */
+    #login-screen { transition: opacity 0.4s ease; }
+    #login-screen.hiding { opacity: 0; pointer-events: none; }
+    .google-btn-wrap { display: flex; justify-content: center; margin-top: 8px; }
+  </style>
+</head>
+<body class="h-full bg-gray-50">
+
+<!-- =====================================================
+     CONFIGURATION — edit these two values
+     ===================================================== -->
+<script>
+  // 1. Get your Client ID from https://console.cloud.google.com/
+  //    APIs & Services > Credentials > Create OAuth 2.0 Client ID (Web application)
+  //    Add  http://localhost:3000  as an Authorized JavaScript origin
+  const GOOGLE_CLIENT_ID = '854838901494-cuhmkrl29oj80i12apt7no01k763r3o2.apps.googleusercontent.com';
+
+  // 2. Emails that get automatic admin (แดชบอร์ด) access without a password
+  const ADMIN_EMAILS = [
+    'pharmacist@salaosot.com',
+    'goodyearzph@gmail.com',
+  ];
+
+  // 3. Paste your Apps Script Web App URL here (from Deploy > Manage Deployments)
+  const APPS_SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbweFg5l_NPr-UfrgraqWhVheJVewKbdH4MxCP46I8iDc_-L8lEssjrWnMQ59fVzOZDa/exec';
+
+  // 4. Branch list
+  const BRANCH_LIST = [
+    "01 คลังรีเทล","02 เขาชะเมา","03 แก่งหางแมว","04 สระแก้ว","05 เมืองใหม่นายอาม",
+    "06 เขาไร่ยา","07 แสนตุ้ง","08 เขาดิน","09 สอยดาว","10 ตลาดเจริญสุข",
+    "11 โป่งน้ำร้อน","12 ทับช้าง","13 วังสมบูรณ์","14 ทุ่งขนาน","15 ตราด",
+    "16 ออฟฟิศ","17 นายายอาม","18 คลองหาด","19 วังน้ำเย็น","20 เกาะลอย",
+    "21 เจ้าหลาว","23 อรัญประเทศ","24 บิ๊กซีจันทบุรี","25 แกลง","26 ตาพระยา",
+    "27 โคกสูง","28 ขลุง","29 พลับพลา","30 วังน้ำเย็น2","31 ตลาดเทศบาลตราด",
+    "32 ตลาดพลิ้ว","33 เขาฉกรรจ์","34 วัฒนานคร","99 ศรีชัยโอสถ"
+  ];
+</script>
+<!-- ===================================================== -->
+
+<!-- ===== Google Sign-In Screen ===== -->
+<div id="login-screen" class="fixed inset-0 z-[200] bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center">
+  <div class="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md mx-4 text-center border border-amber-100">
+
+    <!-- Logo -->
+    <img src="https://img1.pic.in.th/images/logo--1.png" alt="Logo"
+         class="h-16 w-16 object-contain rounded-xl mx-auto mb-4 shadow"
+         onerror="this.style.background='#f59e0b';this.src='data:image/svg+xml,<svg/>';">
+
+    <h1 class="text-2xl font-bold text-gray-900 mb-1">บริษัท ศาลาโอสถรีเทล จำกัด</h1>
+    <p class="text-sm text-gray-500 mb-8">ระบบแจ้งซ่อมบำรุง · กรุณาเข้าสู่ระบบด้วย Google</p>
+
+    <!-- Google Sign-In button rendered here -->
+    <div id="g_signin_btn" class="google-btn-wrap mb-4"></div>
+
+    <!-- Fallback if CLIENT_ID not set -->
+    <div id="setup-notice" class="hidden bg-amber-50 border border-amber-200 rounded-xl p-4 text-left text-sm text-amber-800">
+      <p class="font-bold mb-2">⚙️ ตั้งค่า Google Client ID ก่อนใช้งาน</p>
+      <ol class="list-decimal list-inside space-y-1 text-xs">
+        <li>ไปที่ <b>console.cloud.google.com</b></li>
+        <li>APIs &amp; Services → Credentials</li>
+        <li>Create OAuth 2.0 Client ID (Web application)</li>
+        <li>เพิ่ม <code class="bg-amber-100 px-1 rounded">http://localhost:3000</code> ใน Authorized JS origins</li>
+        <li>วาง Client ID ลงใน <code class="bg-amber-100 px-1 rounded">GOOGLE_CLIENT_ID</code> ด้านบนไฟล์</li>
+      </ol>
+      <!-- Dev bypass button — remove in production -->
+      <button onclick="devBypass()"
+        class="mt-4 w-full bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold py-2 rounded-lg transition-all">
+        🧪 ทดสอบโดยไม่ต้องใช้ Google (Dev only)
+      </button>
+    </div>
+
+    <p class="text-xs text-gray-400 mt-6">เฉพาะผู้มีบัญชีองค์กรเท่านั้น</p>
+  </div>
+</div>
+
+<!-- ===== Main App (hidden until signed in) ===== -->
+<div id="app" class="h-full flex flex-col w-full overflow-auto" style="display:none!important">
+
+  <!-- ===== Loading Bar ===== -->
+  <div id="loading-bar" style="display:none;position:fixed;top:0;left:0;width:100%;height:3px;z-index:999;background:linear-gradient(90deg,#f59e0b,#fcd34d,#f59e0b);background-size:200%;animation:shimmer 1.2s infinite;">
+  </div>
+  <style>@keyframes shimmer{0%{background-position:200% 0}100%{background-position:-200% 0}}</style>
+
+  <!-- ===== Toast ===== -->
+  <div id="toast" class="fixed top-4 right-4 z-50 hidden">
+    <div id="toast-inner" class="px-5 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium text-white">
+      <i id="toast-icon" data-lucide="check-circle" style="width:18px;height:18px;"></i>
+      <span id="toast-msg"></span>
+    </div>
+  </div>
+
+  <!-- ===== Header ===== -->
+  <header class="bg-white shadow-sm border-b border-gray-200 sticky top-0 z-40">
+    <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <img src="https://img1.pic.in.th/images/logo--1.png" alt="Logo"
+             class="h-10 w-10 object-contain rounded"
+             onerror="this.style.background='#f59e0b';this.src='data:image/svg+xml,<svg/>';">
+        <div>
+          <h1 class="text-lg font-bold text-gray-800 leading-tight">บริษัท ศาลาโอสถรีเทล จำกัด</h1>
+          <p class="text-xs text-gray-400">ระบบแจ้งซ่อมบำรุง</p>
+        </div>
+      </div>
+
+      <div class="flex items-center gap-2">
+        <span id="record-count-badge" class="text-xs bg-amber-100 text-amber-700 px-3 py-1 rounded-full font-semibold hidden">0 รายการ</span>
+        <span id="admin-badge" class="hidden text-xs bg-blue-100 text-blue-700 px-3 py-1 rounded-full font-semibold items-center gap-1">
+          <i data-lucide="shield-check" style="width:12px;height:12px;display:inline;"></i> แอดมิน
+        </span>
+
+        <!-- User avatar + name -->
+        <div class="flex items-center gap-2 ml-2 pl-2 border-l border-gray-200">
+          <img id="user-avatar" src="" alt="avatar"
+               class="w-8 h-8 rounded-full border-2 border-amber-200 object-cover hidden">
+          <div class="hidden" id="user-name-wrap">
+            <p id="user-name" class="text-xs font-semibold text-gray-700 leading-tight max-w-28 truncate"></p>
+            <p id="user-email" class="text-xs text-gray-400 leading-tight max-w-28 truncate"></p>
+          </div>
+          <button onclick="handleSignOut()"
+            class="flex items-center gap-1 text-xs text-gray-500 hover:text-red-600 border border-gray-200 hover:border-red-300 px-2 py-1.5 rounded-lg transition-all">
+            <i data-lucide="log-out" style="width:13px;height:13px;"></i> ออก
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Tabs -->
+    <nav class="max-w-7xl mx-auto px-4 flex gap-0 border-t border-gray-100">
+      <button onclick="switchTab('requester')" id="tab-requester"
+        class="px-5 py-3 text-sm font-medium text-gray-500 border-b-3 border-transparent transition-colors tab-active flex items-center gap-2">
+        <i data-lucide="file-text" style="width:16px;height:16px;"></i> แจ้งซ่อม
+      </button>
+      <button onclick="switchTab('admin')" id="tab-admin"
+        class="px-5 py-3 text-sm font-medium text-gray-500 border-b-3 border-transparent transition-colors flex items-center gap-2">
+        <i data-lucide="layout-dashboard" style="width:16px;height:16px;"></i> แดชบอร์ด
+      </button>
+    </nav>
+  </header>
+
+  <!-- ===== Admin Password Modal (for non-admin Google users) ===== -->
+  <div id="admin-login-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay">
+    <div class="bg-white rounded-xl shadow-2xl p-8 w-full max-w-sm mx-4 fade-in border-2 border-amber-100">
+      <div class="text-center mb-8">
+        <div class="w-14 h-14 bg-amber-100 rounded-lg flex items-center justify-center mx-auto mb-3">
+          <i data-lucide="lock" style="width:28px;height:28px;color:#d97706;"></i>
+        </div>
+        <h3 class="font-bold text-gray-800 text-xl">เข้าสู่หน้าแอดมิน</h3>
+        <p class="text-xs text-gray-500 mt-2">บัญชีของคุณไม่มีสิทธิ์แอดมิน<br>กรุณาใส่รหัสผ่านช่างเทคนิค</p>
+      </div>
+      <div>
+        <label class="block text-sm font-semibold text-gray-800 mb-2">🔐 รหัสผ่านช่างเทคนิค</label>
+        <input id="admin-pass-input" type="password" placeholder="••••••••"
+          class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all"
+          onkeydown="if(event.key==='Enter') handleAdminPassword()">
+        <div id="login-error" class="text-sm text-red-600 hidden text-center font-medium mt-3">⚠️ รหัสผ่านไม่ถูกต้อง</div>
+      </div>
+      <button onclick="handleAdminPassword()"
+        class="w-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold py-3 rounded-lg transition-all text-base mt-6 shadow-lg">
+        เข้าสู่ระบบ
+      </button>
+      <button onclick="closeAdminModal()" class="w-full mt-3 text-sm text-gray-400 hover:text-gray-600 py-2">ยกเลิก</button>
+    </div>
+  </div>
+
+  <!-- ===== REQUESTER VIEW ===== -->
+  <main id="view-requester" class="flex-1 max-w-7xl mx-auto w-full px-4 py-6 fade-in">
+    <div class="grid lg:grid-cols-5 gap-6">
+
+      <!-- Form -->
+      <div class="lg:col-span-2">
+        <div class="bg-white rounded-xl shadow-lg border-2 border-amber-100 p-6">
+          <h2 class="text-xl font-bold text-gray-900 mb-1 flex items-center gap-2">
+            <span class="w-10 h-10 bg-amber-100 rounded-lg flex items-center justify-center">
+              <i data-lucide="wrench" style="width:20px;height:20px;color:#d97706;"></i>
+            </span>
+            แบบฟอร์มแจ้งซ่อม
+          </h2>
+          <p class="text-sm text-gray-500 mb-6">กรอกรายละเอียดให้ครบถ้วน</p>
+
+          <form id="repair-form" onsubmit="handleSubmit(event)" class="space-y-5">
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">👤 ชื่อผู้แจ้ง <span class="text-red-500">*</span></label>
+              <input id="f-name" type="text" required placeholder="เช่น สมชาย ใจดี"
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">📧 อีเมล</label>
+              <input id="f-email" type="email" readonly
+                class="w-full border-2 border-gray-100 bg-gray-50 rounded-lg px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">🏢 สาขา <span class="text-red-500">*</span></label>
+              <input id="f-branch" type="text" required placeholder="พิมพ์เพื่อค้นหาสาขา..." list="branch-list"
+                autocomplete="off"
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
+              <datalist id="branch-list"></datalist>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">📞 เบอร์ติดต่อ</label>
+              <input id="f-phone" type="tel" placeholder="เช่น 081-234-5678"
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">🔧 อุปกรณ์ที่ต้องการซ่อม <span class="text-red-500">*</span></label>
+              <input id="f-equip" type="text" required placeholder="เช่น แอร์ชั้น 3, ประตูห้องน้ำ"
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">🏷️ รหัสอุปกรณ์ (ถ้ามี)</label>
+              <input id="f-device-id" type="text" placeholder="เช่น AC-301, PC-IT-05"
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">📂 หมวดหมู่</label>
+              <select id="f-category" class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all bg-white">
+                <option value="electrical">⚡ ระบบไฟฟ้า</option>
+                <option value="plumbing">🚿 ระบบประปา</option>
+                <option value="ac">❄️ เครื่องปรับอากาศ</option>
+                <option value="computer">💻 คอมพิวเตอร์ / IT</option>
+                <option value="furniture">🪑 เฟอร์นิเจอร์</option>
+                <option value="other">🔩 อื่นๆ</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">📸 แนบรูปภาพ (ถ้ามี)</label>
+              <div id="image-preview" class="grid grid-cols-2 gap-2 mb-3"></div>
+              <input id="f-images" type="file" accept="image/*" multiple onchange="previewImages(event)"
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm cursor-pointer hover:border-amber-300 transition-colors">
+              <p class="text-xs text-gray-400 mt-1">แนบได้หลายรูป (ไม่เกิน 5 MB ต่อรูป)</p>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">📝 รายละเอียดปัญหา <span class="text-red-500">*</span></label>
+              <textarea id="f-desc" required rows="4" placeholder="อธิบายปัญหาที่พบ อยู่ที่ไหน เสียหายแบบไหน..."
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm resize-none transition-all"></textarea>
+            </div>
+            <div>
+              <label class="block text-sm font-semibold text-gray-800 mb-3">⏰ ความเร่งด่วน</label>
+              <div class="flex gap-3">
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="urgency" value="low" class="peer hidden" checked>
+                  <div class="peer-checked:border-green-500 peer-checked:bg-green-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center text-sm font-semibold transition-all duration-200">
+                    <div class="text-xl">🟢</div><div>ต่ำ</div>
+                  </div>
+                </label>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="urgency" value="medium" class="peer hidden">
+                  <div class="peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center text-sm font-semibold transition-all duration-200">
+                    <div class="text-xl">🟡</div><div>ปานกลาง</div>
+                  </div>
+                </label>
+                <label class="flex-1 cursor-pointer">
+                  <input type="radio" name="urgency" value="high" class="peer hidden">
+                  <div class="peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center text-sm font-semibold transition-all duration-200">
+                    <div class="text-xl">🔴</div><div>ด่วนมาก</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+            <button type="submit"
+              class="w-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold py-4 rounded-xl transition-all text-base shadow-lg hover:shadow-xl flex items-center justify-center gap-2">
+              <i data-lucide="send" style="width:18px;height:18px;"></i>
+              ส่งแบบฟอร์มแจ้งซ่อม
+            </button>
+          </form>
+        </div>
+      </div>
+
+      <!-- My Tickets List -->
+      <div class="lg:col-span-3">
+        <div class="bg-white rounded-xl shadow-lg border-2 border-gray-100 p-6 h-full">
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-lg font-bold text-gray-900 flex items-center gap-2">
+              <span class="w-9 h-9 bg-blue-50 rounded-lg flex items-center justify-center">
+                <i data-lucide="list" style="width:18px;height:18px;color:#3b82f6;"></i>
+              </span>
+              รายการแจ้งซ่อมของฉัน
+            </h2>
+            <span id="user-ticket-count" class="text-xs bg-gray-100 text-gray-600 px-3 py-1 rounded-full font-medium">0 รายการ</span>
+          </div>
+          <div id="ticket-list-user" class="space-y-3 scroll-area" style="max-height:600px;"></div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <!-- ===== ADMIN VIEW ===== -->
+  <main id="view-admin" class="hidden flex-1 max-w-7xl mx-auto w-full px-4 py-6 fade-in">
+    <div class="grid grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+      <div class="bg-white rounded-xl p-4 shadow border border-gray-100 flex items-center gap-3">
+        <div class="w-10 h-10 bg-gray-100 rounded-lg flex items-center justify-center">
+          <i data-lucide="clipboard-list" style="width:20px;height:20px;color:#6b7280;"></i>
+        </div>
+        <div><p class="text-xs text-gray-500">ทั้งหมด</p><p id="stat-total" class="text-2xl font-bold text-gray-800">0</p></div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow border border-gray-100 flex items-center gap-3">
+        <div class="w-10 h-10 bg-yellow-50 rounded-lg flex items-center justify-center">
+          <i data-lucide="clock" style="width:20px;height:20px;color:#d97706;"></i>
+        </div>
+        <div><p class="text-xs text-gray-500">รอดำเนินการ</p><p id="stat-waiting" class="text-2xl font-bold text-amber-600">0</p></div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow border border-gray-100 flex items-center gap-3">
+        <div class="w-10 h-10 bg-blue-50 rounded-lg flex items-center justify-center">
+          <i data-lucide="loader" style="width:20px;height:20px;color:#3b82f6;"></i>
+        </div>
+        <div><p class="text-xs text-gray-500">กำลังดำเนินการ</p><p id="stat-progress" class="text-2xl font-bold text-blue-600">0</p></div>
+      </div>
+      <div class="bg-white rounded-xl p-4 shadow border border-gray-100 flex items-center gap-3">
+        <div class="w-10 h-10 bg-green-50 rounded-lg flex items-center justify-center">
+          <i data-lucide="check-circle-2" style="width:20px;height:20px;color:#16a34a;"></i>
+        </div>
+        <div><p class="text-xs text-gray-500">เสร็จสิ้น</p><p id="stat-done" class="text-2xl font-bold text-green-600">0</p></div>
+      </div>
+    </div>
+
+    <div class="bg-white rounded-xl shadow border border-gray-100 p-4 mb-4 flex flex-wrap gap-3 items-center">
+      <div class="flex-1 min-w-48 relative">
+        <i data-lucide="search" style="width:16px;height:16px;position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9ca3af;"></i>
+        <input id="admin-search" type="text" placeholder="ค้นหาชื่อ, สาขา, อุปกรณ์..."
+          oninput="renderAdminTickets()"
+          class="w-full border-2 border-gray-200 rounded-lg pl-9 pr-4 py-2.5 text-sm transition-all">
+      </div>
+      <select id="filter-status" onchange="renderAdminTickets()" class="border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white">
+        <option value="">📋 ทุกสถานะ</option>
+        <option value="waiting">⏳ รอดำเนินการ</option>
+        <option value="progress">🔧 กำลังดำเนินการ</option>
+        <option value="done">✅ เสร็จสิ้น</option>
+      </select>
+      <select id="filter-urgency" onchange="renderAdminTickets()" class="border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white">
+        <option value="">⏰ ทุกระดับ</option>
+        <option value="high">🔴 ด่วนมาก</option>
+        <option value="medium">🟡 ปานกลาง</option>
+        <option value="low">🟢 ต่ำ</option>
+      </select>
+      <select id="filter-category" onchange="renderAdminTickets()" class="border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white">
+        <option value="">📂 ทุกหมวด</option>
+        <option value="electrical">⚡ ไฟฟ้า</option>
+        <option value="plumbing">🚿 ประปา</option>
+        <option value="ac">❄️ แอร์</option>
+        <option value="computer">💻 IT</option>
+        <option value="furniture">🪑 เฟอร์นิเจอร์</option>
+        <option value="other">🔩 อื่นๆ</option>
+      </select>
+      <button onclick="refreshAdmin()" class="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 border-2 border-gray-200 hover:border-gray-300 px-3 py-2.5 rounded-lg transition-all">
+        <i data-lucide="refresh-cw" style="width:15px;height:15px;"></i> รีเฟรช
+      </button>
+      <select id="filter-branch" onchange="renderAdminTickets()" class="ml-auto border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white transition-all">
+        <option value="">🏢 ทุกสาขา</option>
+      </select>
+    </div>
+
+    <div id="ticket-list-admin" class="space-y-3"></div>
+  </main>
+
+  <!-- ===== Image Modal ===== -->
+  <div id="img-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay" onclick="closeImgModal()">
+    <img id="img-modal-src" src="" class="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl object-contain">
+  </div>
+
+</div><!-- #app -->
+
+<script>
+// ==================== State ====================
+const ADMIN_PASS = 'IT1234';
+let currentUser = null; // { name, email, picture }
+let isAdmin = false;
+let tickets = [];
+let imageDataURLs = [];
+let useSheets = false;
+
+// ==================== Sheets API ====================
+async function apiPost(body) {
+  const r = await fetch(APPS_SCRIPT_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'text/plain' },
+    body: JSON.stringify(body),
+    redirect: 'follow',
+  });
+  return r.json();
+}
+
+async function loadTickets() {
+  useSheets = APPS_SCRIPT_URL && APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL';
+  if (!useSheets) {
+    tickets = JSON.parse(localStorage.getItem('repair_tickets') || '[]');
+    return;
+  }
+  setLoading(true);
+  try {
+    const r = await fetch(APPS_SCRIPT_URL + '?t=' + Date.now(), { redirect: 'follow' });
+    const j = await r.json();
+    tickets = (j.data || []).map(t => ({
+      ...t,
+      images: JSON.parse(String(t.images || '[]')),
+    })).reverse();
+  } catch(e) {
+    showToast('โหลดข้อมูลไม่สำเร็จ', 'error');
+    tickets = [];
+  }
+  setLoading(false);
+}
+
+function setLoading(on) {
+  document.getElementById('loading-bar').style.display = on ? 'block' : 'none';
+}
+
+// ==================== Google Identity Services ====================
+function initGoogleSignIn() {
+  if (!GOOGLE_CLIENT_ID || GOOGLE_CLIENT_ID === 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com') {
+    document.getElementById('setup-notice').classList.remove('hidden');
+    document.getElementById('g_signin_btn').classList.add('hidden');
+    return;
+  }
+  google.accounts.id.initialize({
+    client_id: GOOGLE_CLIENT_ID,
+    callback: handleCredentialResponse,
+    auto_select: false,
+  });
+  google.accounts.id.renderButton(document.getElementById('g_signin_btn'), {
+    theme: 'outline',
+    size: 'large',
+    text: 'signin_with',
+    shape: 'rectangular',
+    locale: 'th',
+    width: 300,
+  });
+  // Restore session
+  const saved = sessionStorage.getItem('repair_user');
+  if (saved) {
+    currentUser = JSON.parse(saved);
+    enterApp();
+  }
+}
+
+function handleCredentialResponse(response) {
+  const payload = parseJwt(response.credential);
+  currentUser = { name: payload.name, email: payload.email, picture: payload.picture };
+  sessionStorage.setItem('repair_user', JSON.stringify(currentUser));
+  enterApp();
+}
+
+function parseJwt(token) {
+  const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
+  return JSON.parse(atob(base64));
+}
+
+function devBypass() {
+  currentUser = { name: 'ผู้ใช้ทดสอบ', email: 'dev@test.com', picture: '' };
+  enterApp();
+}
+
+async function enterApp() {
+  isAdmin = ADMIN_EMAILS.includes(currentUser.email);
+
+  // Hide login, show app
+  const loginScreen = document.getElementById('login-screen');
+  loginScreen.classList.add('hiding');
+  setTimeout(() => loginScreen.style.display = 'none', 400);
+  document.getElementById('app').style.removeProperty('display');
+
+  // Populate header
+  const avatar = document.getElementById('user-avatar');
+  if (currentUser.picture) { avatar.src = currentUser.picture; avatar.classList.remove('hidden'); }
+  document.getElementById('user-name').textContent = currentUser.name;
+  document.getElementById('user-email').textContent = currentUser.email;
+  document.getElementById('user-name-wrap').classList.remove('hidden');
+
+  if (isAdmin) {
+    document.getElementById('admin-badge').classList.remove('hidden');
+    document.getElementById('admin-badge').classList.add('flex');
+  }
+
+  // Pre-fill form
+  document.getElementById('f-name').value = currentUser.name;
+  document.getElementById('f-email').value = currentUser.email;
+
+  await loadTickets();
+  lucide.createIcons();
+  renderUserTickets();
+  updateBadge();
+}
+
+function handleSignOut() {
+  if (!confirm('ต้องการออกจากระบบ?')) return;
+  sessionStorage.removeItem('repair_user');
+  currentUser = null;
+  isAdmin = false;
+  document.getElementById('login-screen').style.display = '';
+  document.getElementById('login-screen').classList.remove('hiding');
+  document.getElementById('app').style.setProperty('display', 'none', 'important');
+  if (GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com') {
+    google.accounts.id.disableAutoSelect();
+  }
+}
+
+// Wait for GSI script to load
+window.addEventListener('load', () => {
+  if (typeof google !== 'undefined') initGoogleSignIn();
+  else {
+    // GSI script loaded async — wait for it
+    const t = setInterval(() => {
+      if (typeof google !== 'undefined') { clearInterval(t); initGoogleSignIn(); }
+    }, 100);
+    setTimeout(() => {
+      clearInterval(t);
+      document.getElementById('setup-notice').classList.remove('hidden');
+      document.getElementById('g_signin_btn').classList.add('hidden');
+    }, 5000);
+  }
+});
+
+// ==================== Tab ====================
+function switchTab(tab) {
+  if (tab === 'admin' && !isAdmin) { showAdminModal(); return; }
+  document.getElementById('view-requester').classList.toggle('hidden', tab !== 'requester');
+  document.getElementById('view-admin').classList.toggle('hidden', tab !== 'admin');
+  document.getElementById('tab-requester').className =
+    'px-5 py-3 text-sm font-medium border-b-3 border-transparent transition-colors flex items-center gap-2 ' +
+    (tab === 'requester' ? 'tab-active' : 'text-gray-500 hover:text-gray-700');
+  document.getElementById('tab-admin').className =
+    'px-5 py-3 text-sm font-medium border-b-3 border-transparent transition-colors flex items-center gap-2 ' +
+    (tab === 'admin' ? 'tab-active' : 'text-gray-500 hover:text-gray-700');
+  if (tab === 'admin') { updateStats(); renderAdminTickets(); }
+  if (tab === 'requester') renderUserTickets();
+}
+
+// ==================== Admin Password Modal ====================
+function showAdminModal() {
+  const m = document.getElementById('admin-login-modal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+  document.getElementById('login-error').classList.add('hidden');
+  document.getElementById('admin-pass-input').value = '';
+  setTimeout(() => document.getElementById('admin-pass-input').focus(), 100);
+}
+function closeAdminModal() {
+  const m = document.getElementById('admin-login-modal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+}
+function handleAdminPassword() {
+  if (document.getElementById('admin-pass-input').value === ADMIN_PASS) {
+    isAdmin = true;
+    closeAdminModal();
+    document.getElementById('admin-badge').classList.remove('hidden');
+    document.getElementById('admin-badge').classList.add('flex');
+    switchTab('admin');
+    showToast('เข้าสู่ระบบแอดมินสำเร็จ', 'success');
+  } else {
+    document.getElementById('login-error').classList.remove('hidden');
+    document.getElementById('admin-pass-input').value = '';
+  }
+}
+
+// ==================== Image Preview ====================
+let imageFiles = []; // keep File refs for upload
+
+function previewImages(event) {
+  imageDataURLs = [];
+  imageFiles = [];
+  const preview = document.getElementById('image-preview');
+  preview.innerHTML = '';
+  Array.from(event.target.files).slice(0, 8).forEach(file => {
+    if (file.size > 5 * 1024 * 1024) { showToast('รูปใหญ่เกิน 5 MB: ' + file.name, 'error'); return; }
+    imageFiles.push(file);
+    const reader = new FileReader();
+    reader.onload = e => {
+      imageDataURLs.push(e.target.result);
+      const img = document.createElement('img');
+      img.src = e.target.result;
+      img.className = 'img-thumb cursor-pointer';
+      img.onclick = () => openImgModal(e.target.result);
+      preview.appendChild(img);
+    };
+    reader.readAsDataURL(file);
+  });
+}
+
+// ==================== Image Upload to Drive ====================
+function toBase64(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload  = e => resolve(e.target.result);
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+}
+
+async function uploadImages(files, btn) {
+  if (!useSheets || !files.length) return imageDataURLs;
+  const urls = [];
+  for (let i = 0; i < files.length; i++) {
+    btn.textContent = `กำลังอัปโหลดรูป ${i + 1}/${files.length}...`;
+    try {
+      const base64 = await toBase64(files[i]);
+      const res = await apiPost({
+        action: 'uploadImage',
+        base64,
+        filename: files[i].name,
+        mimeType: files[i].type,
+      });
+      if (res.ok) urls.push(res.url);
+    } catch(e) {
+      showToast('อัปโหลดรูปไม่สำเร็จ: ' + files[i].name, 'error');
+    }
+  }
+  return urls;
+}
+
+// ==================== Submit ====================
+async function handleSubmit(event) {
+  event.preventDefault();
+  const btn = event.target.querySelector('button[type="submit"]');
+  btn.disabled = true; btn.textContent = 'กำลังส่ง...';
+
+  const urgency = document.querySelector('input[name="urgency"]:checked')?.value || 'low';
+  const filesToUpload = [...imageFiles]; // capture before reset
+
+  // Upload images first (Drive URLs) or use base64 fallback
+  const images = await uploadImages(filesToUpload, btn);
+
+  const ticket = {
+    id: Date.now(),
+    name: document.getElementById('f-name').value.trim(),
+    email: currentUser?.email || '',
+    branch: document.getElementById('f-branch').value.trim(),
+    phone: document.getElementById('f-phone').value.trim(),
+    equip: document.getElementById('f-equip').value.trim(),
+    deviceId: document.getElementById('f-device-id').value.trim(),
+    category: document.getElementById('f-category').value,
+    desc: document.getElementById('f-desc').value.trim(),
+    urgency,
+    images,
+    status: 'waiting',
+    note: '',
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  btn.textContent = 'กำลังบันทึก...';
+
+  if (useSheets) {
+    try {
+      await apiPost({ action: 'add', ticket });
+      await loadTickets();
+    } catch(e) {
+      showToast('ส่งข้อมูลไม่สำเร็จ', 'error');
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="send" style="width:18px;height:18px;"></i> ส่งแบบฟอร์มแจ้งซ่อม';
+      lucide.createIcons();
+      return;
+    }
+  } else {
+    tickets.unshift(ticket);
+    try { localStorage.setItem('repair_tickets', JSON.stringify(tickets.map(t => ({ ...t, images: t.images?.slice(0,3) })))); } catch(e) {}
+  }
+
+  event.target.reset();
+  document.getElementById('f-name').value = currentUser?.name || '';
+  document.getElementById('f-email').value = currentUser?.email || '';
+  document.getElementById('f-device-id').value = '';
+  document.getElementById('image-preview').innerHTML = '';
+  imageDataURLs = [];
+  imageFiles = [];
+  document.querySelector('input[name="urgency"][value="low"]').checked = true;
+  btn.disabled = false;
+  btn.innerHTML = '<i data-lucide="send" style="width:18px;height:18px;"></i> ส่งแบบฟอร์มแจ้งซ่อม';
+  renderUserTickets();
+  updateBadge();
+  showToast('ส่งแบบฟอร์มสำเร็จ! #' + String(ticket.id).slice(-5), 'success');
+  lucide.createIcons();
+}
+
+// ==================== Render User Tickets ====================
+function renderUserTickets() {
+  const myEmail = currentUser?.email || '';
+  const myTickets = tickets.filter(t => !myEmail || t.email === myEmail || t.email === '');
+  const container = document.getElementById('ticket-list-user');
+  document.getElementById('user-ticket-count').textContent = myTickets.length + ' รายการ';
+  if (!myTickets.length) {
+    container.innerHTML = `<div class="text-center py-16 text-gray-400">
+      <i data-lucide="inbox" style="width:48px;height:48px;margin:0 auto 12px;opacity:0.4;"></i>
+      <p class="text-sm font-medium">ยังไม่มีรายการแจ้งซ่อม</p>
+      <p class="text-xs mt-1">กรอกแบบฟอร์มด้านซ้ายเพื่อแจ้งซ่อม</p></div>`;
+    lucide.createIcons(); return;
+  }
+  container.innerHTML = myTickets.map(t => `
+    <div class="border-2 border-gray-100 rounded-xl p-4 card-hover bg-gray-50 fade-in">
+      <div class="flex items-start justify-between gap-2 mb-2">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="font-bold text-gray-800 text-sm">${escHtml(t.equip)}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium urgency-${t.urgency}">${urgencyLabel(t.urgency)}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-medium status-${t.status}">${statusLabel(t.status)}</span>
+          </div>
+          <p class="text-xs text-gray-500 mt-1">🏢 ${escHtml(t.branch)} · ${categoryLabel(t.category)}</p>
+          ${t.phone ? `<p class="text-xs text-gray-500">📞 ${escHtml(t.phone)}</p>` : ''}
+        </div>
+        <span class="text-xs text-gray-400 whitespace-nowrap">#${String(t.id).slice(-5)}</span>
+      </div>
+      <p class="text-sm text-gray-700 mt-2 line-clamp-2">${escHtml(t.desc)}</p>
+      ${t.note ? `<p class="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">💬 หมายเหตุช่าง: ${escHtml(t.note)}</p>` : ''}
+      ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.slice(0,3).map(img =>
+        `<img src="${img}" class="h-14 w-20 object-cover rounded-lg border-2 border-gray-200 cursor-pointer" onclick="openImgModal('${img}')">`).join('')}</div>` : ''}
+      <p class="text-xs text-gray-400 mt-2">${formatDate(t.createdAt)}</p>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+// ==================== Render Admin Tickets ====================
+function renderAdminTickets() {
+  const search   = document.getElementById('admin-search').value.toLowerCase();
+  const fStatus  = document.getElementById('filter-status').value;
+  const fUrgency = document.getElementById('filter-urgency').value;
+  const fCat     = document.getElementById('filter-category').value;
+  const fBranch  = document.getElementById('filter-branch').value;
+  const list = tickets.filter(t =>
+    (!search || t.name.toLowerCase().includes(search) || t.branch.toLowerCase().includes(search) ||
+      t.equip.toLowerCase().includes(search) || t.desc.toLowerCase().includes(search) ||
+      (t.deviceId || '').toLowerCase().includes(search)) &&
+    (!fStatus  || t.status  === fStatus) &&
+    (!fUrgency || t.urgency === fUrgency) &&
+    (!fCat     || t.category === fCat) &&
+    (!fBranch  || t.branch  === fBranch));
+
+  const container = document.getElementById('ticket-list-admin');
+  if (!list.length) {
+    container.innerHTML = `<div class="text-center py-16 text-gray-400 bg-white rounded-xl shadow border border-gray-100">
+      <i data-lucide="search-x" style="width:48px;height:48px;margin:0 auto 12px;opacity:0.4;"></i>
+      <p class="text-sm font-medium">ไม่พบรายการ</p></div>`;
+    lucide.createIcons(); return;
+  }
+  container.innerHTML = list.map(t => `
+    <div class="bg-white rounded-xl shadow border-2 ${urgencyBorder(t.urgency)} p-5 card-hover fade-in">
+      <div class="flex items-start justify-between gap-3 flex-wrap">
+        <div class="flex-1">
+          <div class="flex items-center gap-2 flex-wrap mb-1">
+            <span class="font-bold text-gray-900">${escHtml(t.equip)}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-semibold urgency-${t.urgency}">${urgencyLabel(t.urgency)}</span>
+            <span class="text-xs px-2 py-0.5 rounded-full font-semibold status-${t.status}">${statusLabel(t.status)}</span>
+            <span class="text-xs text-gray-400">${categoryLabel(t.category)}</span>
+          </div>
+          <p class="text-sm text-gray-600">👤 <b>${escHtml(t.name)}</b> · 🏢 ${escHtml(t.branch)}${t.phone ? ` · 📞 ${escHtml(t.phone)}` : ''}</p>
+          ${t.email ? `<p class="text-xs text-gray-400">📧 ${escHtml(t.email)}</p>` : ''}
+          ${t.deviceId ? `<p class="text-xs text-gray-500">🏷️ รหัสอุปกรณ์: <span class="font-mono bg-gray-100 px-1 rounded">${escHtml(t.deviceId)}</span></p>` : ''}
+          <p class="text-sm text-gray-700 mt-2">${escHtml(t.desc)}</p>
+        </div>
+        <div class="text-right flex flex-col items-end gap-1 shrink-0">
+          <span class="text-xs text-gray-400">#${String(t.id).slice(-5)}</span>
+          <span class="text-xs text-gray-400">${formatDate(t.createdAt)}</span>
+        </div>
+      </div>
+      ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.map(img =>
+        `<img src="${img}" class="h-16 w-24 object-cover rounded-lg border-2 border-gray-200 cursor-pointer hover:opacity-80 transition-opacity" onclick="openImgModal('${img}')">`).join('')}</div>` : ''}
+      <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-3 items-end">
+        <div class="flex-1 min-w-48">
+          <label class="text-xs font-semibold text-gray-600 mb-1 block">📌 อัปเดตสถานะ</label>
+          <select onchange="updateStatus(${t.id}, this.value)"
+            class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white transition-all">
+            <option value="waiting"  ${t.status==='waiting'  ?'selected':''}>⏳ รอดำเนินการ</option>
+            <option value="progress" ${t.status==='progress' ?'selected':''}>🔧 กำลังดำเนินการ</option>
+            <option value="done"     ${t.status==='done'     ?'selected':''}>✅ เสร็จสิ้น</option>
+          </select>
+        </div>
+        <div class="flex-1 min-w-48">
+          <label class="text-xs font-semibold text-gray-600 mb-1 block">💬 หมายเหตุช่าง</label>
+          <div class="flex gap-2">
+            <input id="note-${t.id}" type="text" value="${escHtml(t.note||'')}" placeholder="เพิ่มหมายเหตุ..."
+              class="flex-1 border-2 border-gray-200 rounded-lg px-3 py-2 text-sm transition-all"
+              onkeydown="if(event.key==='Enter') saveNote(${t.id})">
+            <button onclick="saveNote(${t.id})"
+              class="bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all">บันทึก</button>
+          </div>
+        </div>
+        <button onclick="deleteTicket(${t.id})"
+          class="flex items-center gap-1 text-sm text-red-400 hover:text-red-600 border-2 border-red-100 hover:border-red-300 px-3 py-2 rounded-lg transition-all">
+          <i data-lucide="trash-2" style="width:14px;height:14px;"></i> ลบ
+        </button>
+      </div>
+    </div>`).join('');
+  lucide.createIcons();
+}
+
+// ==================== Admin Actions ====================
+async function updateStatus(id, status) {
+  const t = tickets.find(t => t.id === id); if (!t) return;
+  t.status = status; t.updatedAt = new Date().toISOString();
+  if (useSheets) await apiPost({ action: 'update', id, field: 'status', value: status });
+  else { try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {} }
+  updateStats(); renderAdminTickets(); renderUserTickets();
+  showToast('อัปเดตสถานะสำเร็จ', 'success');
+}
+async function saveNote(id) {
+  const t = tickets.find(t => t.id === id); if (!t) return;
+  t.note = document.getElementById('note-'+id)?.value?.trim() || '';
+  t.updatedAt = new Date().toISOString();
+  if (useSheets) await apiPost({ action: 'update', id, field: 'note', value: t.note });
+  else { try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {} }
+  renderUserTickets();
+  showToast('บันทึกหมายเหตุแล้ว', 'success');
+}
+async function deleteTicket(id) {
+  if (!confirm('ต้องการลบรายการนี้?')) return;
+  tickets = tickets.filter(t => t.id !== id);
+  localStorage.removeItem('img_' + id);
+  if (useSheets) await apiPost({ action: 'delete', id });
+  else { try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {} }
+  updateStats(); updateBadge(); renderAdminTickets(); renderUserTickets();
+  showToast('ลบรายการแล้ว', 'error');
+}
+async function clearAllTickets() {
+  if (!confirm('ต้องการลบรายการทั้งหมด?')) return;
+  tickets.forEach(t => localStorage.removeItem('img_' + t.id));
+  tickets = [];
+  if (useSheets) await apiPost({ action: 'clear' });
+  else { try { localStorage.setItem('repair_tickets', JSON.stringify([])); } catch(e) {} }
+  updateStats(); updateBadge(); renderAdminTickets(); renderUserTickets();
+  showToast('ล้างข้อมูลทั้งหมดแล้ว', 'error');
+}
+
+async function refreshAdmin() {
+  await loadTickets();
+  updateStats(); renderAdminTickets(); renderUserTickets();
+  showToast('รีเฟรชข้อมูลแล้ว', 'success');
+}
+
+// ==================== Stats / Badge ====================
+function updateStats() {
+  document.getElementById('stat-total').textContent    = tickets.length;
+  document.getElementById('stat-waiting').textContent  = tickets.filter(t=>t.status==='waiting').length;
+  document.getElementById('stat-progress').textContent = tickets.filter(t=>t.status==='progress').length;
+  document.getElementById('stat-done').textContent     = tickets.filter(t=>t.status==='done').length;
+  updateBadge();
+}
+function updateBadge() {
+  const b = document.getElementById('record-count-badge');
+  if (tickets.length) { b.textContent = tickets.length+' รายการ'; b.classList.remove('hidden'); }
+  else b.classList.add('hidden');
+}
+
+// ==================== Toast ====================
+function showToast(msg, type='success') {
+  const toast = document.getElementById('toast');
+  const inner = document.getElementById('toast-inner');
+  document.getElementById('toast-msg').textContent = msg;
+  inner.className = 'px-5 py-3 rounded-lg shadow-lg flex items-center gap-2 text-sm font-medium text-white '+(type==='success'?'bg-green-600':'bg-red-500');
+  document.getElementById('toast-icon').setAttribute('data-lucide', type==='success'?'check-circle':'alert-circle');
+  lucide.createIcons();
+  toast.classList.remove('hidden'); toast.classList.add('flex');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(()=>{ toast.classList.add('hidden'); toast.classList.remove('flex'); }, 3000);
+}
+
+// ==================== Image Modal ====================
+function openImgModal(src) {
+  document.getElementById('img-modal-src').src = src;
+  const m = document.getElementById('img-modal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+}
+function closeImgModal() {
+  const m = document.getElementById('img-modal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+}
+
+// ==================== Helpers ====================
+function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function urgencyLabel(v){ return {low:'🟢 ต่ำ',medium:'🟡 ปานกลาง',high:'🔴 ด่วนมาก'}[v]||v; }
+function statusLabel(v){ return {waiting:'⏳ รอดำเนินการ',progress:'🔧 กำลังดำเนินการ',done:'✅ เสร็จสิ้น'}[v]||v; }
+function categoryLabel(v){ return {electrical:'⚡ ไฟฟ้า',plumbing:'🚿 ประปา',ac:'❄️ แอร์',computer:'💻 IT',furniture:'🪑 เฟอร์นิเจอร์',other:'🔩 อื่นๆ'}[v]||v; }
+function urgencyBorder(v){ return {low:'border-green-100',medium:'border-amber-200',high:'border-red-300'}[v]||'border-gray-100'; }
+function formatDate(iso){ if(!iso) return ''; const d=new Date(iso); return d.toLocaleDateString('th-TH',{year:'numeric',month:'short',day:'numeric'})+' '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}); }
+
+document.addEventListener('DOMContentLoaded', () => {
+  // Populate datalist
+  const dl = document.getElementById('branch-list');
+  BRANCH_LIST.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b;
+    dl.appendChild(opt);
+  });
+  // Populate branch filter select in admin
+  const sel = document.getElementById('filter-branch');
+  BRANCH_LIST.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b; opt.textContent = b;
+    sel.appendChild(opt);
+  });
+  lucide.createIcons();
+});
+</script>
+</body>
+</html>
