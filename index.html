@@ -87,7 +87,7 @@
          onerror="this.style.background='#f59e0b';this.src='data:image/svg+xml,<svg/>';">
 
     <h1 class="text-2xl font-bold text-gray-900 mb-1">บริษัท ศาลาโอสถรีเทล จำกัด</h1>
-    <p class="text-sm text-gray-500 mb-8">ระบบแจ้งซ่อมบำรุง · กรุณาเข้าสู่ระบบด้วย Google</p>
+    <p class="text-sm text-gray-500 mb-8">ระบบแจ้งซ่อมบำรุง · กรุณาเข้าสู่ระบบด้วย Google Accounts ของร้าน</p>
 
     <!-- Google Sign-In button rendered here -->
     <div id="g_signin_btn" class="google-btn-wrap mb-4"></div>
@@ -109,7 +109,7 @@
       </button>
     </div>
 
-    <p class="text-xs text-gray-400 mt-6">เฉพาะผู้มีบัญชีองค์กรเท่านั้น</p>
+    <p class="text-xs text-gray-400 mt-6">เฉพาะบัญชี Google ในองค์กรเท่านั้น</p>
   </div>
 </div>
 
@@ -220,11 +220,11 @@
           <form id="repair-form" onsubmit="handleSubmit(event)" class="space-y-5">
             <div>
               <label class="block text-sm font-semibold text-gray-800 mb-2">👤 ชื่อผู้แจ้ง <span class="text-red-500">*</span></label>
-              <input id="f-name" type="text" required placeholder="เช่น สมชาย ใจดี"
+              <input id="f-name" type="text" required placeholder="เช่น คุณแป้ง IT, ภก.ปาล์ม นยอ."
                 class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
             </div>
             <div>
-              <label class="block text-sm font-semibold text-gray-800 mb-2">📧 อีเมล</label>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">📧 อีเมล(ไม่ต้องใส่)</label>
               <input id="f-email" type="email" readonly
                 class="w-full border-2 border-gray-100 bg-gray-50 rounded-lg px-4 py-3 text-sm text-gray-500 cursor-not-allowed">
             </div>
@@ -237,7 +237,7 @@
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-800 mb-2">📞 เบอร์ติดต่อ</label>
-              <input id="f-phone" type="tel" placeholder="เช่น 081-234-5678"
+              <input id="f-phone" type="tel" placeholder="เบอร์โทรร้านหรือผู้แจ้ง"
                 class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
             </div>
             <div>
@@ -246,8 +246,8 @@
                 class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
             </div>
             <div>
-              <label class="block text-sm font-semibold text-gray-800 mb-2">🏷️ รหัสอุปกรณ์ (ถ้ามี)</label>
-              <input id="f-device-id" type="text" placeholder="เช่น AC-301, PC-IT-05"
+              <label class="block text-sm font-semibold text-gray-800 mb-2">🏷️ รหัสอุปกรณ์(ถ้ามี)</label>
+              <input id="f-device-id" type="text" placeholder="เช่น PC012026010101"
                 class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
             </div>
             <div>
@@ -262,7 +262,7 @@
               </select>
             </div>
             <div>
-              <label class="block text-sm font-semibold text-gray-800 mb-2">📸 แนบรูปภาพ (ถ้ามี)</label>
+              <label class="block text-sm font-semibold text-gray-800 mb-2">📸 แนบรูปภาพ(ถ้ามี)</label>
               <div id="image-preview" class="grid grid-cols-2 gap-2 mb-3"></div>
               <input id="f-images" type="file" accept="image/*" multiple onchange="previewImages(event)"
                 class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm cursor-pointer hover:border-amber-300 transition-colors">
@@ -278,20 +278,26 @@
               <div class="flex gap-3">
                 <label class="flex-1 cursor-pointer">
                   <input type="radio" name="urgency" value="low" class="peer hidden" checked>
-                  <div class="peer-checked:border-green-500 peer-checked:bg-green-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center text-sm font-semibold transition-all duration-200">
-                    <div class="text-xl">🟢</div><div>ต่ำ</div>
+                  <div class="peer-checked:border-green-500 peer-checked:bg-green-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center transition-all duration-200">
+                    <div class="text-xl">🟢</div>
+                    <div class="text-sm font-bold mt-1">ต่ำ</div>
+                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">มีอุปกรณ์ทดแทนหรือใช้งานต่อได้ รอได้ &gt;7วัน</div>
                   </div>
                 </label>
                 <label class="flex-1 cursor-pointer">
                   <input type="radio" name="urgency" value="medium" class="peer hidden">
-                  <div class="peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center text-sm font-semibold transition-all duration-200">
-                    <div class="text-xl">🟡</div><div>ปานกลาง</div>
+                  <div class="peer-checked:border-amber-500 peer-checked:bg-amber-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center transition-all duration-200">
+                    <div class="text-xl">🟡</div>
+                    <div class="text-sm font-bold mt-1">ปานกลาง</div>
+                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">ไม่กระทบการปฏิบัติงาน รอได้ 2-7วัน</div>
                   </div>
                 </label>
                 <label class="flex-1 cursor-pointer">
                   <input type="radio" name="urgency" value="high" class="peer hidden">
-                  <div class="peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center text-sm font-semibold transition-all duration-200">
-                    <div class="text-xl">🔴</div><div>ด่วนมาก</div>
+                  <div class="peer-checked:border-red-500 peer-checked:bg-red-50 peer-checked:shadow-md border-2 border-gray-200 rounded-lg py-3 text-center transition-all duration-200">
+                    <div class="text-xl">🔴</div>
+                    <div class="text-sm font-bold mt-1">ด่วนมาก</div>
+                    <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">กระทบการปฏิบัติงาน ต้องซ่อมใน 1-2วัน</div>
                   </div>
                 </label>
               </div>
