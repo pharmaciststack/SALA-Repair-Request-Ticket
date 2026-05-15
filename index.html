@@ -102,11 +102,6 @@
         <li>เพิ่ม <code class="bg-amber-100 px-1 rounded">http://localhost:3000</code> ใน Authorized JS origins</li>
         <li>วาง Client ID ลงใน <code class="bg-amber-100 px-1 rounded">GOOGLE_CLIENT_ID</code> ด้านบนไฟล์</li>
       </ol>
-      <!-- Dev bypass button — remove in production -->
-      <button onclick="devBypass()"
-        class="mt-4 w-full bg-gray-700 hover:bg-gray-800 text-white text-xs font-semibold py-2 rounded-lg transition-all">
-        🧪 ทดสอบโดยไม่ต้องใช้ Google (Dev only)
-      </button>
     </div>
 
     <p class="text-xs text-gray-400 mt-6">เฉพาะบัญชี Google ในองค์กรเท่านั้น</p>
@@ -494,10 +489,11 @@ let useSheets = false;
 
 // ==================== Sheets API ====================
 async function apiPost(body) {
+  const credential = sessionStorage.getItem('repair_credential') || '';
   const r = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
-    body: JSON.stringify(body),
+    body: JSON.stringify({ ...body, idToken: credential }),
     redirect: 'follow',
   });
   return r.json();
@@ -510,7 +506,8 @@ async function loadTickets() {
   }
   setLoading(true);
   try {
-    const r = await fetch(APPS_SCRIPT_URL + '?t=' + Date.now(), { redirect: 'follow' });
+    const credential = sessionStorage.getItem('repair_credential') || '';
+    const r = await fetch(APPS_SCRIPT_URL + '?t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
     const j = await r.json();
     tickets = (j.data || []).map(t => ({
       ...t,
@@ -547,11 +544,23 @@ function initGoogleSignIn() {
     locale: 'th',
     width: 300,
   });
-  // Restore session
+  // Restore session — verify the stored credential hasn't expired (Google tokens last 1 hour)
   const saved = sessionStorage.getItem('repair_user');
-  if (saved) {
-    currentUser = JSON.parse(saved);
-    enterApp();
+  const savedCred = sessionStorage.getItem('repair_credential');
+  if (saved && savedCred) {
+    try {
+      const payload = parseJwt(savedCred);
+      if (payload.exp * 1000 > Date.now()) {
+        currentUser = JSON.parse(saved);
+        enterApp();
+      } else {
+        sessionStorage.removeItem('repair_user');
+        sessionStorage.removeItem('repair_credential');
+      }
+    } catch(e) {
+      sessionStorage.removeItem('repair_user');
+      sessionStorage.removeItem('repair_credential');
+    }
   }
 }
 
@@ -559,6 +568,7 @@ function handleCredentialResponse(response) {
   const payload = parseJwt(response.credential);
   currentUser = { name: payload.name, email: payload.email, picture: payload.picture };
   sessionStorage.setItem('repair_user', JSON.stringify(currentUser));
+  sessionStorage.setItem('repair_credential', response.credential);
   enterApp();
 }
 
@@ -567,10 +577,6 @@ function parseJwt(token) {
   return JSON.parse(atob(base64));
 }
 
-function devBypass() {
-  currentUser = { name: 'ผู้ใช้ทดสอบ', email: 'dev@test.com', picture: '' };
-  enterApp();
-}
 
 async function enterApp() {
   isSuperAdmin = ADMIN_EMAILS.includes(currentUser.email);
@@ -621,6 +627,7 @@ async function enterApp() {
 function handleSignOut() {
   if (!confirm('ต้องการออกจากระบบ?')) return;
   sessionStorage.removeItem('repair_user');
+  sessionStorage.removeItem('repair_credential');
   currentUser = null;
   isAdmin = false;
   isSuperAdmin = false;
@@ -680,7 +687,8 @@ function switchTab(tab) {
 async function loadDynamicAdmins() {
   if (!useSheets) return;
   try {
-    const r = await fetch(APPS_SCRIPT_URL + '?action=getAdmins&t=' + Date.now(), { redirect: 'follow' });
+    const credential = sessionStorage.getItem('repair_credential') || '';
+    const r = await fetch(APPS_SCRIPT_URL + '?action=getAdmins&t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
     const j = await r.json();
     dynamicAdmins = j.admins || [];
   } catch(e) { dynamicAdmins = []; }
@@ -689,7 +697,8 @@ async function loadDynamicAdmins() {
 async function loadTechEmails() {
   if (!useSheets) return;
   try {
-    const r = await fetch(APPS_SCRIPT_URL + '?action=getTechs&t=' + Date.now(), { redirect: 'follow' });
+    const credential = sessionStorage.getItem('repair_credential') || '';
+    const r = await fetch(APPS_SCRIPT_URL + '?action=getTechs&t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
     const j = await r.json();
     techEmails = j.techs || [];
   } catch(e) { techEmails = []; }
@@ -789,10 +798,21 @@ function renderAdminList() {
 function generateRepairReport(id) {
   const t = tickets.find(t => String(t.id) === String(id));
   if (!t) return;
+  // Pre-escape all user-supplied fields before injecting into document.write()
+  const s = {
+    name:     escHtml(t.name     || '-'),
+    email:    escHtml(t.email    || '-'),
+    branch:   escHtml(t.branch   || '-'),
+    phone:    escHtml(t.phone    || '-'),
+    equip:    escHtml(t.equip    || '-'),
+    deviceId: escHtml(t.deviceId || ''),
+    desc:     escHtml(t.desc     || '-').replace(/\n/g, '<br>'),
+    note:     escHtml(t.note     || 'ไม่มีหมายเหตุ').replace(/\n/g, '<br>'),
+  };
   const w = window.open('', '_blank', 'width=800,height=900');
   const completedDate = t.updatedAt ? formatDate(t.updatedAt) : '-';
   const imagesHtml = (t.images||[]).map(url =>
-    `<img src="${url}" style="width:160px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;">`
+    `<img src="${escHtml(url)}" style="width:160px;height:120px;object-fit:cover;border-radius:8px;border:1px solid #e5e7eb;">`
   ).join('');
   w.document.write(`<!doctype html><html lang="th"><head>
   <meta charset="UTF-8">
@@ -850,15 +870,15 @@ function generateRepairReport(id) {
   <div class="grid2">
     <div class="card">
       <h3>👤 ข้อมูลผู้แจ้ง</h3>
-      <div class="row"><span class="lbl">ชื่อ:</span><span class="val">${t.name||'-'}</span></div>
-      <div class="row"><span class="lbl">อีเมล:</span><span class="val">${t.email||'-'}</span></div>
-      <div class="row"><span class="lbl">สาขา:</span><span class="val">${t.branch||'-'}</span></div>
-      <div class="row"><span class="lbl">เบอร์ติดต่อ:</span><span class="val">${t.phone||'-'}</span></div>
+      <div class="row"><span class="lbl">ชื่อ:</span><span class="val">${s.name}</span></div>
+      <div class="row"><span class="lbl">อีเมล:</span><span class="val">${s.email}</span></div>
+      <div class="row"><span class="lbl">สาขา:</span><span class="val">${s.branch}</span></div>
+      <div class="row"><span class="lbl">เบอร์ติดต่อ:</span><span class="val">${s.phone}</span></div>
     </div>
     <div class="card">
       <h3>🔧 ข้อมูลอุปกรณ์</h3>
-      <div class="row"><span class="lbl">อุปกรณ์:</span><span class="val">${t.equip||'-'}</span></div>
-      ${t.deviceId?`<div class="row"><span class="lbl">รหัสอุปกรณ์:</span><span class="val">${t.deviceId}</span></div>`:''}
+      <div class="row"><span class="lbl">อุปกรณ์:</span><span class="val">${s.equip}</span></div>
+      ${s.deviceId?`<div class="row"><span class="lbl">รหัสอุปกรณ์:</span><span class="val">${s.deviceId}</span></div>`:''}
       <div class="row"><span class="lbl">หมวดหมู่:</span><span class="val">${{electrical:'⚡ ไฟฟ้า',plumbing:'🚿 ประปา',ac:'❄️ แอร์',computer:'💻 IT',furniture:'🪑 เฟอร์นิเจอร์',other:'🔩 อื่นๆ'}[t.category]||t.category}</span></div>
       <div class="row"><span class="lbl">ความเร่งด่วน:</span><span class="val"><span class="badge badge-${t.urgency}">${{low:'🟢 ต่ำ',medium:'🟡 ปานกลาง',high:'🔴 ด่วนมาก'}[t.urgency]||t.urgency}</span></span></div>
     </div>
@@ -876,15 +896,15 @@ function generateRepairReport(id) {
   </div>
   <div class="desc-box">
     <h3>📝 รายละเอียดปัญหา</h3>
-    <p>${(t.desc||'-').replace(/\n/g,'<br>')}</p>
+    <p>${s.desc}</p>
   </div>
   ${imagesHtml ? `<div class="desc-box"><h3>📸 รูปภาพประกอบ</h3><div class="images">${imagesHtml}</div></div>` : ''}
   <div class="note-box">
     <h3>💬 หมายเหตุช่าง / วิธีแก้ไข</h3>
-    <p>${(t.note||'ไม่มีหมายเหตุ').replace(/\n/g,'<br>')}</p>
+    <p>${s.note}</p>
   </div>
   <div class="sig-grid">
-    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นผู้แจ้ง<br>(${t.name||''})</div></div>
+    <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นผู้แจ้ง<br>(${s.name})</div></div>
     <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นช่างเทคนิค</div></div>
     <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นผู้อนุมัติ</div></div>
   </div>
@@ -1044,7 +1064,7 @@ function renderUserTickets() {
       <p class="text-sm text-gray-700 mt-2 line-clamp-2">${escHtml(t.desc)}</p>
       ${t.note ? `<p class="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">💬 หมายเหตุช่าง: ${escHtml(t.note)}</p>` : ''}
       ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.slice(0,3).map(img =>
-        `<img src="${img}" class="h-14 w-20 object-cover rounded-lg border-2 border-gray-200 cursor-pointer" onclick="openImgModal('${img}')">`).join('')}</div>` : ''}
+        `<img src="${escHtml(img)}" class="h-14 w-20 object-cover rounded-lg border-2 border-gray-200 cursor-pointer" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)">`).join('')}</div>` : ''}
       <p class="text-xs text-gray-400 mt-2">${formatDate(t.createdAt)}</p>
     </div>`).join('');
   lucide.createIcons();
@@ -1097,7 +1117,7 @@ function renderAdminTickets() {
         </div>
       </div>
       ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.map(img =>
-        `<img src="${img}" class="h-16 w-24 object-cover rounded-lg border-2 border-gray-200 cursor-pointer hover:opacity-80 transition-opacity" onclick="openImgModal('${img}')">`).join('')}</div>` : ''}
+        `<img src="${escHtml(img)}" class="h-16 w-24 object-cover rounded-lg border-2 border-gray-200 cursor-pointer hover:opacity-80 transition-opacity" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)">`).join('')}</div>` : ''}
       <div class="mt-4 pt-4 border-t border-gray-100 flex flex-wrap gap-3 items-end">
         <div class="flex-1 min-w-48">
           <label class="text-xs font-semibold text-gray-600 mb-1 block">📌 อัปเดตสถานะ</label>
