@@ -20,18 +20,16 @@ function verifyToken(idToken) {
   if (!idToken) throw new Error('Missing token');
   const parts = idToken.split('.');
   if (parts.length !== 3) throw new Error('Invalid JWT');
-  try {
-    const padding = '==='.substring(0, (4 - parts[1].length % 4) % 4);
-    const payload = JSON.parse(
-      Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1] + padding)).getDataAsString()
-    );
-    if (!payload.email) throw new Error('No email in token');
-    if (payload.exp * 1000 < Date.now()) throw new Error('Token expired');
-    if (payload.aud !== GOOGLE_CLIENT_ID) throw new Error('Wrong audience');
-    return payload.email.toLowerCase();
-  } catch(e) {
-    throw new Error('Token invalid: ' + e.message);
-  }
+  // Convert base64url → base64, add padding, decode bytes → string → JSON
+  const b64 = parts[1].replace(/-/g, '+').replace(/_/g, '/');
+  const padded = b64 + '==='.slice((b64.length + 3) % 4);
+  const bytes = Utilities.base64Decode(padded);
+  const jsonStr = bytes.map(function(b) { return String.fromCharCode(b); }).join('');
+  const payload = JSON.parse(jsonStr);
+  if (!payload.email) throw new Error('No email in token');
+  if (payload.exp * 1000 < Date.now()) throw new Error('Token expired');
+  if (payload.aud !== GOOGLE_CLIENT_ID) throw new Error('Wrong audience');
+  return payload.email.toLowerCase();
 }
 
 function isAdminEmail(email) {
@@ -46,11 +44,16 @@ function doGet(e) {
   const action  = e && e.parameter && e.parameter.action;
   const idToken = e && e.parameter && e.parameter.idToken;
 
+  // No-auth version check — open this URL in browser to confirm deployment
+  if (action === 'ping') {
+    return json({ ok: true, version: '3.0', time: new Date().toISOString() });
+  }
+
   let callerEmail;
   try {
     callerEmail = verifyToken(idToken);
   } catch(err) {
-    return json({ ok: false, error: 'Unauthorized' });
+    return json({ ok: false, error: 'Unauthorized', debug: String(err) });
   }
 
   if (action === 'getAdmins') {
