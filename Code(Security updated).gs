@@ -71,7 +71,7 @@ function doGet(e) {
   if (action === 'getUser') {
     const rows = getUsersSheet().getDataRange().getValues().slice(1);
     const user = rows.find(r => String(r[0]).toLowerCase().trim() === callerEmail);
-    if (user) return json({ ok: true, registered: true, branch: String(user[1] || ''), role: String(user[3] || 'user'), status: String(user[4] || 'approved') });
+    if (user) return json({ ok: true, registered: true, branch: String(user[1] || ''), role: String(user[3] || 'user'), status: String(user[4] || 'pending') });
     return json({ ok: true, registered: false });
   }
 
