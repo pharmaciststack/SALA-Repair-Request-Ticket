@@ -105,6 +105,13 @@
     </div>
 
     <p class="text-xs text-gray-400 mt-6">เฉพาะบัญชี Google ในองค์กรเท่านั้น</p>
+    <div id="login-checking" class="hidden mt-4 flex items-center justify-center gap-2 text-sm text-amber-600">
+      <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+        <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+        <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z"></path>
+      </svg>
+      กำลังตรวจสอบบัญชี...
+    </div>
   </div>
 </div>
 
@@ -649,17 +656,21 @@ async function enterApp() {
   isSuperAdmin = ADMIN_EMAILS.includes(currentUser.email);
   useSheets = !!(APPS_SCRIPT_URL && APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL');
 
-  // Hide login screen
+  // Check registration while login screen is still visible
+  let reg = { registered: true, status: 'approved' };
+  if (useSheets) {
+    document.getElementById('login-checking').classList.remove('hidden');
+    reg = await checkRegistration();
+    document.getElementById('login-checking').classList.add('hidden');
+  }
+
+  // Now hide login screen
   const loginScreen = document.getElementById('login-screen');
   loginScreen.classList.add('hiding');
   setTimeout(() => loginScreen.style.display = 'none', 400);
 
-  // Check registration and approval status
-  if (useSheets) {
-    const reg = await checkRegistration();
-    if (!reg.registered) { showRegisterModal(); return; }
-    if (!isSuperAdmin && reg.status !== 'approved') { showPendingScreen(); return; }
-  }
+  if (!reg.registered) { showRegisterModal(); return; }
+  if (!isSuperAdmin && reg.status !== 'approved') { showPendingScreen(); return; }
 
   await loadAndRenderApp();
 }
