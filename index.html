@@ -670,10 +670,15 @@ async function checkRegistration() {
     const credential = sessionStorage.getItem('repair_credential') || '';
     const r = await fetch(APPS_SCRIPT_URL + '?action=getUser&t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
     const j = await r.json();
-    if (!j.registered) return { registered: false };
-    return { registered: true, status: j.status || 'approved', role: j.role || 'user' };
+    if (!j.registered) { sessionStorage.removeItem('repair_reg_status'); return { registered: false }; }
+    const result = { registered: true, status: j.status || 'approved', role: j.role || 'user' };
+    sessionStorage.setItem('repair_reg_status', JSON.stringify(result));
+    return result;
   } catch(e) {
-    return { registered: true, status: 'approved' }; // fail open
+    // Use cached status on error — prevents refresh bypass for pending users
+    const cached = sessionStorage.getItem('repair_reg_status');
+    if (cached) { try { return JSON.parse(cached); } catch(e2) {} }
+    return { registered: true, status: 'approved' };
   }
 }
 
@@ -697,12 +702,22 @@ async function submitRegistration() {
   const btn = document.getElementById('reg-submit-btn');
   btn.disabled = true; btn.textContent = 'กำลังลงทะเบียน...';
   try {
+    if (!BRANCH_LIST.includes(branch)) {
+      errEl.textContent = 'กรุณาเลือกสาขาจากรายการที่กำหนดเท่านั้น';
+      errEl.classList.remove('hidden');
+      btn.disabled = false;
+      btn.innerHTML = '<i data-lucide="user-check" style="width:18px;height:18px;"></i> ลงทะเบียน';
+      lucide.createIcons();
+      return;
+    }
     const result = await apiPost({ action: 'registerUser', branch });
     if (!result.ok) throw new Error(result.error || 'Save failed');
     document.getElementById('register-modal').style.setProperty('display', 'none', 'important');
     if (isSuperAdmin) {
+      sessionStorage.setItem('repair_reg_status', JSON.stringify({ registered: true, status: 'approved' }));
       await loadAndRenderApp();
     } else {
+      sessionStorage.setItem('repair_reg_status', JSON.stringify({ registered: true, status: 'pending' }));
       showPendingScreen();
     }
   } catch(e) {
@@ -775,18 +790,14 @@ function renderUserConsole() {
       ? '<span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">⭐ Super Admin</span>'
       : isPending
         ? '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">🕐 รออนุมัติ</span>'
-        : u.role === 'admin'
-          ? '<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">🛡️ Admin</span>'
-          : '<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">✅ User</span>';
-    const actionBtns = isSuperA ? '' : isPending
-      ? `<button onclick="approveUser('${escHtml(u.email)}')"
-           class="text-xs text-green-600 hover:text-green-800 border border-green-200 hover:border-green-400 bg-green-50 hover:bg-green-100 px-2.5 py-1 rounded-lg transition-all font-semibold">อนุมัติ</button>`
-      : `<div class="flex gap-1">${u.role === 'admin'
-          ? `<button onclick="setUserRole('${escHtml(u.email)}','user')"
-               class="text-xs text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-2.5 py-1 rounded-lg transition-all">ถอด Admin</button>`
-          : `<button onclick="setUserRole('${escHtml(u.email)}','admin')"
-               class="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 hover:border-blue-400 px-2.5 py-1 rounded-lg transition-all">ตั้งเป็น Admin</button>`
-        }</div>`;
+        : '<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">✅ อนุมัติแล้ว</span>';
+    const actionBtns = isSuperA ? '' :
+      `<div class="flex gap-1 items-center">
+        ${isPending ? `<button onclick="approveUser('${escHtml(u.email)}')"
+           class="text-xs text-green-600 hover:text-green-800 border border-green-200 hover:border-green-400 bg-green-50 hover:bg-green-100 px-2.5 py-1 rounded-lg transition-all font-semibold">อนุมัติ</button>` : ''}
+        <button onclick="deleteUser('${escHtml(u.email)}')"
+          class="text-xs text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-2.5 py-1 rounded-lg transition-all">ลบบัญชี</button>
+      </div>`;
     return `
       <div class="flex items-center justify-between ${isPending ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'} border rounded-lg px-4 py-3">
         <div class="flex-1 min-w-0 mr-3">
@@ -799,6 +810,15 @@ function renderUserConsole() {
         <div class="shrink-0">${actionBtns}</div>
       </div>`;
   }).join('');
+}
+
+async function deleteUser(email) {
+  if (!confirm('ลบบัญชี ' + email + '?\nผู้ใช้จะต้องลงทะเบียนใหม่')) return;
+  const result = await apiPost({ action: 'deleteUser', email });
+  if (!result.ok) { showToast('ลบบัญชีไม่สำเร็จ', 'error'); return; }
+  allUsers = allUsers.filter(u => u.email.toLowerCase() !== email.toLowerCase());
+  renderUserConsole();
+  showToast('ลบบัญชี ' + email + ' แล้ว', 'error');
 }
 
 async function approveUser(email) {
@@ -828,6 +848,7 @@ function handleSignOut() {
   if (!confirm('ต้องการออกจากระบบ?')) return;
   sessionStorage.removeItem('repair_user');
   sessionStorage.removeItem('repair_credential');
+  sessionStorage.removeItem('repair_reg_status');
   currentUser = null;
   isAdmin = false;
   isSuperAdmin = false;

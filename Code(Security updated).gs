@@ -182,6 +182,24 @@ function doPost(e) {
       uSheet.appendRow([callerEmail, String(body.branch || '').trim(), new Date().toISOString(), 'user', isSuper ? 'approved' : 'pending']);
     }
 
+  } else if (body.action === 'deleteUser') {
+    if (!isAdminEmail(callerEmail)) return json({ ok: false, error: 'Forbidden' });
+    const targetEmail = String(body.email || '').toLowerCase().trim();
+    if (SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(targetEmail)) {
+      return json({ ok: false, error: 'Cannot delete super admin' });
+    }
+    const uSheet = getUsersSheet();
+    const uData = uSheet.getDataRange().getValues();
+    for (let i = 1; i < uData.length; i++) {
+      if (String(uData[i][0]).toLowerCase().trim() === targetEmail) { uSheet.deleteRow(i + 1); break; }
+    }
+    // Also remove from AdminEmails if they had admin role
+    const aSheet = getAdminSheet();
+    const aData = aSheet.getDataRange().getValues();
+    for (let i = 1; i < aData.length; i++) {
+      if (String(aData[i][0]).toLowerCase().trim() === targetEmail) { aSheet.deleteRow(i + 1); break; }
+    }
+
   } else if (body.action === 'approveUser') {
     if (!isAdminEmail(callerEmail)) return json({ ok: false, error: 'Forbidden' });
     const targetEmail = String(body.email || '').toLowerCase().trim();
