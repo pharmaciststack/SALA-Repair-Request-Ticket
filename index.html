@@ -639,7 +639,7 @@ async function enterApp() {
   setTimeout(() => loginScreen.style.display = 'none', 400);
 
   // Check if first-time user — show registration modal if not yet signed up
-  if (useSheets && !isSuperAdmin) {
+  if (useSheets) {
     const registered = await checkRegistration();
     if (!registered) { showRegisterModal(); return; }
   }
