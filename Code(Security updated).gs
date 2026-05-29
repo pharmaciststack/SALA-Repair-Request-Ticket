@@ -71,14 +71,14 @@ function doGet(e) {
   if (action === 'getUser') {
     const rows = getUsersSheet().getDataRange().getValues().slice(1);
     const user = rows.find(r => String(r[0]).toLowerCase().trim() === callerEmail);
-    if (user) return json({ ok: true, registered: true, branch: String(user[1] || ''), role: String(user[3] || 'user') });
+    if (user) return json({ ok: true, registered: true, branch: String(user[1] || ''), role: String(user[3] || 'user'), status: String(user[4] || 'approved') });
     return json({ ok: true, registered: false });
   }
 
   if (action === 'getUsers') {
     if (!isAdminEmail(callerEmail)) return json({ ok: false, error: 'Forbidden' });
     const rows = getUsersSheet().getDataRange().getValues().slice(1);
-    const users = rows.map(r => ({ email: r[0], branch: r[1], registeredAt: r[2], role: r[3] || 'user' }));
+    const users = rows.map(r => ({ email: r[0], branch: r[1], registeredAt: r[2], role: r[3] || 'user', status: r[4] || 'approved' }));
     return json({ ok: true, users });
   }
 
@@ -178,7 +178,20 @@ function doPost(e) {
     const existing = uSheet.getDataRange().getValues().slice(1);
     const alreadyExists = existing.some(r => String(r[0]).toLowerCase().trim() === callerEmail);
     if (!alreadyExists) {
-      uSheet.appendRow([callerEmail, String(body.branch || '').trim(), new Date().toISOString(), 'user']);
+      const isSuper = SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(callerEmail);
+      uSheet.appendRow([callerEmail, String(body.branch || '').trim(), new Date().toISOString(), 'user', isSuper ? 'approved' : 'pending']);
+    }
+
+  } else if (body.action === 'approveUser') {
+    if (!isAdminEmail(callerEmail)) return json({ ok: false, error: 'Forbidden' });
+    const targetEmail = String(body.email || '').toLowerCase().trim();
+    const uSheet = getUsersSheet();
+    const uData = uSheet.getDataRange().getValues();
+    for (let i = 1; i < uData.length; i++) {
+      if (String(uData[i][0]).toLowerCase().trim() === targetEmail) {
+        uSheet.getRange(i + 1, 5).setValue('approved');
+        break;
+      }
     }
 
   } else if (body.action === 'setRole') {
@@ -392,7 +405,7 @@ function getUsersSheet() {
   let sheet = ss.getSheetByName('Users');
   if (!sheet) {
     sheet = ss.insertSheet('Users');
-    sheet.appendRow(['email', 'branch', 'registeredAt', 'role']);
+    sheet.appendRow(['email', 'branch', 'registeredAt', 'role', 'status']);
     sheet.setFrozenRows(1);
   }
   return sheet;

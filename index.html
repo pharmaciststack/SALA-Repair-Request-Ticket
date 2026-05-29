@@ -138,6 +138,23 @@
   </div>
 </div>
 
+<!-- ===== Pending Approval Screen ===== -->
+<div id="pending-screen" class="fixed inset-0 z-[250] bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center" style="display:none!important">
+  <div class="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md mx-4 border border-amber-100 text-center">
+    <div class="w-16 h-16 bg-amber-100 rounded-full flex items-center justify-center mx-auto mb-4">
+      <i data-lucide="clock" style="width:32px;height:32px;color:#d97706;"></i>
+    </div>
+    <h2 class="text-xl font-bold text-gray-900 mb-2">รอการอนุมัติ</h2>
+    <p class="text-sm text-gray-500 mb-3">บัญชีของคุณอยู่ระหว่างรอการอนุมัติจากแอดมิน</p>
+    <div id="pending-email" class="text-sm font-semibold text-amber-600 bg-amber-50 rounded-lg px-4 py-2 mb-4 inline-block"></div>
+    <p class="text-xs text-gray-400 mb-6">กรุณาติดต่อฝ่าย IT / ภก.ปาล์ม เพื่อขอการอนุมัติ</p>
+    <button onclick="handleSignOut()"
+      class="text-sm text-gray-500 hover:text-red-600 border border-gray-200 hover:border-red-300 px-5 py-2.5 rounded-lg transition-all flex items-center gap-2 mx-auto">
+      <i data-lucide="log-out" style="width:14px;height:14px;"></i> ออกจากระบบ
+    </button>
+  </div>
+</div>
+
 <!-- ===== Main App (hidden until signed in) ===== -->
 <div id="app" class="h-full flex flex-col w-full overflow-auto" style="display:none!important">
 
@@ -638,10 +655,11 @@ async function enterApp() {
   loginScreen.classList.add('hiding');
   setTimeout(() => loginScreen.style.display = 'none', 400);
 
-  // Check if first-time user — show registration modal if not yet signed up
+  // Check registration and approval status
   if (useSheets) {
-    const registered = await checkRegistration();
-    if (!registered) { showRegisterModal(); return; }
+    const reg = await checkRegistration();
+    if (!reg.registered) { showRegisterModal(); return; }
+    if (!isSuperAdmin && reg.status !== 'approved') { showPendingScreen(); return; }
   }
 
   await loadAndRenderApp();
@@ -652,15 +670,22 @@ async function checkRegistration() {
     const credential = sessionStorage.getItem('repair_credential') || '';
     const r = await fetch(APPS_SCRIPT_URL + '?action=getUser&t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
     const j = await r.json();
-    return j.registered === true;
+    if (!j.registered) return { registered: false };
+    return { registered: true, status: j.status || 'approved', role: j.role || 'user' };
   } catch(e) {
-    return true; // fail open — don't block user on network error
+    return { registered: true, status: 'approved' }; // fail open
   }
 }
 
 function showRegisterModal() {
   document.getElementById('reg-email').textContent = currentUser.email;
   document.getElementById('register-modal').style.removeProperty('display');
+  lucide.createIcons();
+}
+
+function showPendingScreen() {
+  document.getElementById('pending-email').textContent = currentUser.email;
+  document.getElementById('pending-screen').style.removeProperty('display');
   lucide.createIcons();
 }
 
@@ -675,7 +700,11 @@ async function submitRegistration() {
     const result = await apiPost({ action: 'registerUser', branch });
     if (!result.ok) throw new Error(result.error || 'Save failed');
     document.getElementById('register-modal').style.setProperty('display', 'none', 'important');
-    await loadAndRenderApp();
+    if (isSuperAdmin) {
+      await loadAndRenderApp();
+    } else {
+      showPendingScreen();
+    }
   } catch(e) {
     errEl.textContent = 'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่';
     errEl.classList.remove('hidden');
@@ -741,18 +770,25 @@ function renderUserConsole() {
   }
   container.innerHTML = filtered.map(u => {
     const isSuperA = ADMIN_EMAILS.map(e => e.toLowerCase()).includes(u.email.toLowerCase());
+    const isPending = u.status === 'pending';
     const roleTag = isSuperA
       ? '<span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">⭐ Super Admin</span>'
-      : u.role === 'admin'
-        ? '<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">🛡️ Admin</span>'
-        : '<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">👤 User</span>';
-    const toggleBtn = isSuperA ? '' : u.role === 'admin'
-      ? `<button onclick="setUserRole('${escHtml(u.email)}','user')"
-           class="text-xs text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-2.5 py-1 rounded-lg transition-all">ถอด Admin</button>`
-      : `<button onclick="setUserRole('${escHtml(u.email)}','admin')"
-           class="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 hover:border-blue-400 px-2.5 py-1 rounded-lg transition-all">ตั้งเป็น Admin</button>`;
+      : isPending
+        ? '<span class="text-xs bg-amber-100 text-amber-700 px-2 py-0.5 rounded-full font-semibold">🕐 รออนุมัติ</span>'
+        : u.role === 'admin'
+          ? '<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">🛡️ Admin</span>'
+          : '<span class="text-xs bg-green-100 text-green-700 px-2 py-0.5 rounded-full font-semibold">✅ User</span>';
+    const actionBtns = isSuperA ? '' : isPending
+      ? `<button onclick="approveUser('${escHtml(u.email)}')"
+           class="text-xs text-green-600 hover:text-green-800 border border-green-200 hover:border-green-400 bg-green-50 hover:bg-green-100 px-2.5 py-1 rounded-lg transition-all font-semibold">อนุมัติ</button>`
+      : `<div class="flex gap-1">${u.role === 'admin'
+          ? `<button onclick="setUserRole('${escHtml(u.email)}','user')"
+               class="text-xs text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-2.5 py-1 rounded-lg transition-all">ถอด Admin</button>`
+          : `<button onclick="setUserRole('${escHtml(u.email)}','admin')"
+               class="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 hover:border-blue-400 px-2.5 py-1 rounded-lg transition-all">ตั้งเป็น Admin</button>`
+        }</div>`;
     return `
-      <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+      <div class="flex items-center justify-between ${isPending ? 'bg-amber-50 border-amber-200' : 'bg-gray-50 border-gray-200'} border rounded-lg px-4 py-3">
         <div class="flex-1 min-w-0 mr-3">
           <div class="flex items-center gap-2 flex-wrap">
             <span class="text-sm font-medium text-gray-800 truncate">${escHtml(u.email)}</span>
@@ -760,9 +796,19 @@ function renderUserConsole() {
           </div>
           <p class="text-xs text-gray-400 mt-0.5">🏢 ${escHtml(u.branch || '-')} · ลงทะเบียน ${u.registeredAt ? formatDate(u.registeredAt) : '-'}</p>
         </div>
-        <div class="shrink-0">${toggleBtn}</div>
+        <div class="shrink-0">${actionBtns}</div>
       </div>`;
   }).join('');
+}
+
+async function approveUser(email) {
+  if (!confirm('อนุมัติการเข้าใช้งาน: ' + email + '?')) return;
+  const result = await apiPost({ action: 'approveUser', email });
+  if (!result.ok) { showToast('อนุมัติไม่สำเร็จ', 'error'); return; }
+  const u = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (u) u.status = 'approved';
+  renderUserConsole();
+  showToast('อนุมัติ ' + email + ' สำเร็จ', 'success');
 }
 
 async function setUserRole(email, role) {
@@ -790,6 +836,7 @@ function handleSignOut() {
   allUsers      = [];
   document.getElementById('login-screen').style.display = '';
   document.getElementById('login-screen').classList.remove('hiding');
+  document.getElementById('pending-screen').style.setProperty('display', 'none', 'important');
   document.getElementById('app').style.setProperty('display', 'none', 'important');
   if (GOOGLE_CLIENT_ID !== 'YOUR_GOOGLE_CLIENT_ID.apps.googleusercontent.com') {
     google.accounts.id.disableAutoSelect();
