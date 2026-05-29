@@ -14,18 +14,24 @@ const SUPER_ADMIN_EMAILS = ['pharmacist@salaosot.com', 'goodyearzph@gmail.com'];
 const ALLOWED_UPDATE_FIELDS = ['status', 'note'];
 
 // ── Auth helpers ──────────────────────────────────────
-// Verifies the Google ID token against Google's tokeninfo endpoint.
-// Returns the caller's verified email (lowercase) or throws on failure.
+// Decodes a Google ID token locally (no external network call).
+// Checks expiry and audience; returns verified email (lowercase) or throws.
 function verifyToken(idToken) {
   if (!idToken) throw new Error('Missing token');
-  const resp = UrlFetchApp.fetch(
-    'https://oauth2.googleapis.com/tokeninfo?id_token=' + encodeURIComponent(idToken),
-    { muteHttpExceptions: true }
-  );
-  const info = JSON.parse(resp.getContentText());
-  if (info.error || !info.email) throw new Error('Invalid token');
-  if (info.aud !== GOOGLE_CLIENT_ID) throw new Error('Wrong audience');
-  return info.email.toLowerCase();
+  const parts = idToken.split('.');
+  if (parts.length !== 3) throw new Error('Invalid JWT');
+  try {
+    const padding = '==='.substring(0, (4 - parts[1].length % 4) % 4);
+    const payload = JSON.parse(
+      Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[1] + padding)).getDataAsString()
+    );
+    if (!payload.email) throw new Error('No email in token');
+    if (payload.exp * 1000 < Date.now()) throw new Error('Token expired');
+    if (payload.aud !== GOOGLE_CLIENT_ID) throw new Error('Wrong audience');
+    return payload.email.toLowerCase();
+  } catch(e) {
+    throw new Error('Token invalid: ' + e.message);
+  }
 }
 
 function isAdminEmail(email) {

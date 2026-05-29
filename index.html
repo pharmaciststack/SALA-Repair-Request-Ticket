@@ -672,7 +672,8 @@ async function submitRegistration() {
   const btn = document.getElementById('reg-submit-btn');
   btn.disabled = true; btn.textContent = 'กำลังลงทะเบียน...';
   try {
-    await apiPost({ action: 'registerUser', branch });
+    const result = await apiPost({ action: 'registerUser', branch });
+    if (!result.ok) throw new Error(result.error || 'Save failed');
     document.getElementById('register-modal').style.setProperty('display', 'none', 'important');
     await loadAndRenderApp();
   } catch(e) {
