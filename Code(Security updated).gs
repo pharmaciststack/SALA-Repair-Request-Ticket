@@ -46,7 +46,7 @@ function doGet(e) {
 
   // No-auth version check — open this URL in browser to confirm deployment
   if (action === 'ping') {
-    return json({ ok: true, version: '3.0', time: new Date().toISOString() });
+    return json({ ok: true, version: '4.0', time: new Date().toISOString() });
   }
 
   let callerEmail;
