@@ -670,7 +670,7 @@ async function checkRegistration() {
     const r = await fetch(APPS_SCRIPT_URL + '?action=getUser&t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
     const j = await r.json();
     if (!j.registered) { sessionStorage.removeItem('repair_reg_status'); return { registered: false }; }
-    const result = { registered: true, status: j.status || 'approved', role: j.role || 'user' };
+    const result = { registered: true, status: (j.status === 'approved' ? 'approved' : 'pending'), role: j.role || 'user' };
     sessionStorage.setItem('repair_reg_status', JSON.stringify(result));
     return result;
   } catch(e) {
