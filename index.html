@@ -108,6 +108,36 @@
   </div>
 </div>
 
+<!-- ===== Registration Modal (first login) ===== -->
+<div id="register-modal" class="fixed inset-0 z-[250] bg-gradient-to-br from-amber-50 to-orange-50 flex items-center justify-center" style="display:none!important">
+  <div class="bg-white rounded-2xl shadow-2xl p-10 w-full max-w-md mx-4 border border-amber-100">
+    <div class="text-center mb-6">
+      <img src="https://img1.pic.in.th/images/logo--1.png" alt="Logo"
+           class="h-14 w-14 object-contain rounded-xl mx-auto mb-3 shadow"
+           onerror="this.style.background='#f59e0b';this.src='data:image/svg+xml,<svg/>';">
+      <h2 class="text-xl font-bold text-gray-900">ลงทะเบียนใช้งาน</h2>
+      <p class="text-sm text-gray-500 mt-1">ครั้งแรกที่ใช้งาน กรุณาระบุสาขาของคุณ</p>
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 mb-2">📧 อีเมล</label>
+      <div id="reg-email" class="w-full border-2 border-amber-100 bg-amber-50 rounded-lg px-4 py-3 text-sm text-gray-700 font-medium"></div>
+    </div>
+    <div class="mb-4">
+      <label class="block text-sm font-semibold text-gray-700 mb-2">🏢 สาขาของคุณ <span class="text-red-500">*</span></label>
+      <input id="reg-branch" type="text" placeholder="พิมพ์เพื่อค้นหาสาขา..." list="reg-branch-list"
+        autocomplete="off"
+        class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
+      <datalist id="reg-branch-list"></datalist>
+    </div>
+    <p id="reg-error" class="text-xs text-red-500 mb-3 hidden"></p>
+    <button id="reg-submit-btn" onclick="submitRegistration()"
+      class="w-full bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold py-3 rounded-xl transition-all text-base shadow-lg flex items-center justify-center gap-2">
+      <i data-lucide="user-check" style="width:18px;height:18px;"></i>
+      ลงทะเบียน
+    </button>
+  </div>
+</div>
+
 <!-- ===== Main App (hidden until signed in) ===== -->
 <div id="app" class="h-full flex flex-col w-full overflow-auto" style="display:none!important">
 
@@ -463,6 +493,26 @@
         </div>
       </div>
     </div>
+
+    <!-- User Console -->
+    <div class="bg-white rounded-xl shadow border border-gray-100 p-6 mt-4">
+      <h2 class="text-lg font-bold text-gray-900 mb-1 flex items-center gap-2">
+        <span class="w-9 h-9 bg-green-50 rounded-lg flex items-center justify-center">
+          <i data-lucide="users-round" style="width:18px;height:18px;color:#16a34a;"></i>
+        </span>
+        จัดการผู้ใช้งาน
+      </h2>
+      <p class="text-xs text-gray-400 mb-4">ผู้ใช้ที่ลงทะเบียนแล้วทั้งหมด · กำหนดสิทธิ์ User / Admin ได้ที่นี่</p>
+      <div class="mb-4 relative">
+        <i data-lucide="search" style="width:15px;height:15px;position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9ca3af;"></i>
+        <input id="user-console-search" type="text" placeholder="ค้นหาอีเมลหรือสาขา..."
+          oninput="renderUserConsole()"
+          class="w-full border-2 border-gray-200 rounded-lg pl-9 pr-4 py-2.5 text-sm transition-all">
+      </div>
+      <div id="user-console-list" class="space-y-2">
+        <p class="text-sm text-gray-400 py-4 text-center">กำลังโหลด...</p>
+      </div>
+    </div>
   </main>
 
   <!-- ===== Footer ===== -->
@@ -486,6 +536,7 @@ let techEmails    = [];      // emails loaded from Sheets TechEmails tab
 let tickets = [];
 let imageDataURLs = [];
 let useSheets = false;
+let allUsers = [];
 
 // ==================== Sheets API ====================
 async function apiPost(body) {
@@ -580,41 +631,82 @@ function parseJwt(token) {
 
 async function enterApp() {
   isSuperAdmin = ADMIN_EMAILS.includes(currentUser.email);
-
-  // Set useSheets FIRST — before any API calls that depend on it
   useSheets = !!(APPS_SCRIPT_URL && APPS_SCRIPT_URL !== 'YOUR_APPS_SCRIPT_URL');
 
-  // Hide login, show app
+  // Hide login screen
   const loginScreen = document.getElementById('login-screen');
   loginScreen.classList.add('hiding');
   setTimeout(() => loginScreen.style.display = 'none', 400);
+
+  // Check if first-time user — show registration modal if not yet signed up
+  if (useSheets && !isSuperAdmin) {
+    const registered = await checkRegistration();
+    if (!registered) { showRegisterModal(); return; }
+  }
+
+  await loadAndRenderApp();
+}
+
+async function checkRegistration() {
+  try {
+    const credential = sessionStorage.getItem('repair_credential') || '';
+    const r = await fetch(APPS_SCRIPT_URL + '?action=getUser&t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
+    const j = await r.json();
+    return j.registered === true;
+  } catch(e) {
+    return true; // fail open — don't block user on network error
+  }
+}
+
+function showRegisterModal() {
+  document.getElementById('reg-email').textContent = currentUser.email;
+  document.getElementById('register-modal').style.removeProperty('display');
+  lucide.createIcons();
+}
+
+async function submitRegistration() {
+  const branch = document.getElementById('reg-branch').value.trim();
+  const errEl  = document.getElementById('reg-error');
+  if (!branch) { errEl.textContent = 'กรุณาระบุสาขา'; errEl.classList.remove('hidden'); return; }
+  errEl.classList.add('hidden');
+  const btn = document.getElementById('reg-submit-btn');
+  btn.disabled = true; btn.textContent = 'กำลังลงทะเบียน...';
+  try {
+    await apiPost({ action: 'registerUser', branch });
+    document.getElementById('register-modal').style.setProperty('display', 'none', 'important');
+    await loadAndRenderApp();
+  } catch(e) {
+    errEl.textContent = 'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่';
+    errEl.classList.remove('hidden');
+    btn.disabled = false;
+    btn.innerHTML = '<i data-lucide="user-check" style="width:18px;height:18px;"></i> ลงทะเบียน';
+    lucide.createIcons();
+  }
+}
+
+async function loadAndRenderApp() {
   document.getElementById('app').style.removeProperty('display');
 
-  // Populate header
   const avatar = document.getElementById('user-avatar');
   if (currentUser.picture) { avatar.src = currentUser.picture; avatar.classList.remove('hidden'); }
   document.getElementById('user-name').textContent = currentUser.name;
   document.getElementById('user-email').textContent = currentUser.email;
   document.getElementById('user-name-wrap').classList.remove('hidden');
 
-  // Load dynamic admins + tech emails from Sheets (useSheets is now set correctly)
   await loadDynamicAdmins();
   await loadTechEmails();
 
-  // isAdmin = super admin OR in dynamic list
   isAdmin = isSuperAdmin || dynamicAdmins.map(e=>e.toLowerCase()).includes(currentUser.email.toLowerCase());
 
   if (isAdmin) {
     document.getElementById('admin-badge').classList.remove('hidden');
     document.getElementById('admin-badge').classList.add('flex');
   }
-  // Show settings tab for super admins only
   if (isSuperAdmin) {
     document.getElementById('tab-settings').classList.remove('hidden');
     document.getElementById('tab-settings').classList.add('flex');
   }
 
-  // Pre-fill form
   document.getElementById('f-name').value = currentUser.name;
   document.getElementById('f-email').value = currentUser.email;
 
@@ -622,6 +714,67 @@ async function enterApp() {
   lucide.createIcons();
   renderUserTickets();
   updateBadge();
+}
+
+// ==================== User Console ====================
+async function loadUsers() {
+  if (!useSheets) return;
+  try {
+    const credential = sessionStorage.getItem('repair_credential') || '';
+    const r = await fetch(APPS_SCRIPT_URL + '?action=getUsers&t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
+    const j = await r.json();
+    allUsers = j.users || [];
+  } catch(e) { allUsers = []; }
+}
+
+function renderUserConsole() {
+  const container = document.getElementById('user-console-list');
+  if (!container) return;
+  const search = (document.getElementById('user-console-search')?.value || '').toLowerCase();
+  const filtered = allUsers.filter(u =>
+    !search || u.email.toLowerCase().includes(search) || (u.branch || '').toLowerCase().includes(search)
+  );
+  if (!filtered.length) {
+    container.innerHTML = '<p class="text-sm text-gray-400 py-4 text-center">ไม่พบผู้ใช้งาน</p>';
+    return;
+  }
+  container.innerHTML = filtered.map(u => {
+    const isSuperA = ADMIN_EMAILS.map(e => e.toLowerCase()).includes(u.email.toLowerCase());
+    const roleTag = isSuperA
+      ? '<span class="text-xs bg-purple-100 text-purple-700 px-2 py-0.5 rounded-full font-semibold">⭐ Super Admin</span>'
+      : u.role === 'admin'
+        ? '<span class="text-xs bg-blue-100 text-blue-700 px-2 py-0.5 rounded-full font-semibold">🛡️ Admin</span>'
+        : '<span class="text-xs bg-gray-100 text-gray-600 px-2 py-0.5 rounded-full font-semibold">👤 User</span>';
+    const toggleBtn = isSuperA ? '' : u.role === 'admin'
+      ? `<button onclick="setUserRole('${escHtml(u.email)}','user')"
+           class="text-xs text-red-400 hover:text-red-600 border border-red-100 hover:border-red-300 px-2.5 py-1 rounded-lg transition-all">ถอด Admin</button>`
+      : `<button onclick="setUserRole('${escHtml(u.email)}','admin')"
+           class="text-xs text-blue-500 hover:text-blue-700 border border-blue-200 hover:border-blue-400 px-2.5 py-1 rounded-lg transition-all">ตั้งเป็น Admin</button>`;
+    return `
+      <div class="flex items-center justify-between bg-gray-50 border border-gray-200 rounded-lg px-4 py-3">
+        <div class="flex-1 min-w-0 mr-3">
+          <div class="flex items-center gap-2 flex-wrap">
+            <span class="text-sm font-medium text-gray-800 truncate">${escHtml(u.email)}</span>
+            ${roleTag}
+          </div>
+          <p class="text-xs text-gray-400 mt-0.5">🏢 ${escHtml(u.branch || '-')} · ลงทะเบียน ${u.registeredAt ? formatDate(u.registeredAt) : '-'}</p>
+        </div>
+        <div class="shrink-0">${toggleBtn}</div>
+      </div>`;
+  }).join('');
+}
+
+async function setUserRole(email, role) {
+  const label = role === 'admin' ? 'ตั้งเป็น Admin' : 'ถอด Admin';
+  if (!confirm(label + ': ' + email + '?')) return;
+  await apiPost({ action: 'setRole', email, role });
+  const u = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
+  if (u) u.role = role;
+  if (role === 'admin') { if (!dynamicAdmins.map(e=>e.toLowerCase()).includes(email.toLowerCase())) dynamicAdmins.push(email); }
+  else { dynamicAdmins = dynamicAdmins.filter(e => e.toLowerCase() !== email.toLowerCase()); }
+  renderUserConsole();
+  renderAdminList();
+  showToast(label + ' ' + email + ' สำเร็จ', 'success');
 }
 
 function handleSignOut() {
@@ -633,6 +786,7 @@ function handleSignOut() {
   isSuperAdmin = false;
   dynamicAdmins = [];
   techEmails    = [];
+  allUsers      = [];
   document.getElementById('login-screen').style.display = '';
   document.getElementById('login-screen').classList.remove('hiding');
   document.getElementById('app').style.setProperty('display', 'none', 'important');
@@ -675,10 +829,11 @@ function switchTab(tab) {
   if (tab === 'admin')    { updateStats(); renderAdminTickets(); }
   if (tab === 'requester') renderUserTickets();
   if (tab === 'settings')  {
-    renderAdminList(); renderTechList(); // show cached immediately
-    if (useSheets) {                     // then refresh from Sheets in background
+    renderAdminList(); renderTechList(); renderUserConsole();
+    if (useSheets) {
       loadDynamicAdmins().then(renderAdminList);
       loadTechEmails().then(renderTechList);
+      loadUsers().then(renderUserConsole);
     }
   }
 }
@@ -1271,6 +1426,13 @@ document.addEventListener('DOMContentLoaded', () => {
     const opt = document.createElement('option');
     opt.value = b; opt.textContent = b;
     sel.appendChild(opt);
+  });
+  // Populate registration branch datalist
+  const regDl = document.getElementById('reg-branch-list');
+  BRANCH_LIST.forEach(b => {
+    const opt = document.createElement('option');
+    opt.value = b;
+    regDl.appendChild(opt);
   });
   lucide.createIcons();
 });

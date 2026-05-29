@@ -59,6 +59,20 @@ function doGet(e) {
     return json({ ok: true, techs });
   }
 
+  if (action === 'getUser') {
+    const rows = getUsersSheet().getDataRange().getValues().slice(1);
+    const user = rows.find(r => String(r[0]).toLowerCase().trim() === callerEmail);
+    if (user) return json({ ok: true, registered: true, branch: String(user[1] || ''), role: String(user[3] || 'user') });
+    return json({ ok: true, registered: false });
+  }
+
+  if (action === 'getUsers') {
+    if (!isAdminEmail(callerEmail)) return json({ ok: false, error: 'Forbidden' });
+    const rows = getUsersSheet().getDataRange().getValues().slice(1);
+    const users = rows.map(r => ({ email: r[0], branch: r[1], registeredAt: r[2], role: r[3] || 'user' }));
+    return json({ ok: true, users });
+  }
+
   // default — return tickets
   // Admins see all tickets; regular users see only their own
   const sheet = getSheet();
@@ -148,6 +162,42 @@ function doPost(e) {
   } else if (body.action === 'clear') {
     const last = sheet.getLastRow();
     if (last > 1) sheet.deleteRows(2, last - 1);
+
+  // ── User Registration & Role Management ──────────
+  } else if (body.action === 'registerUser') {
+    const uSheet = getUsersSheet();
+    const existing = uSheet.getDataRange().getValues().slice(1);
+    const alreadyExists = existing.some(r => String(r[0]).toLowerCase().trim() === callerEmail);
+    if (!alreadyExists) {
+      uSheet.appendRow([callerEmail, String(body.branch || '').trim(), new Date().toISOString(), 'user']);
+    }
+
+  } else if (body.action === 'setRole') {
+    if (!isAdminEmail(callerEmail)) return json({ ok: false, error: 'Forbidden' });
+    const targetEmail = String(body.email || '').toLowerCase().trim();
+    if (SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(targetEmail)) {
+      return json({ ok: false, error: 'Cannot modify super admin' });
+    }
+    // Update role in Users sheet
+    const uSheet = getUsersSheet();
+    const uData = uSheet.getDataRange().getValues();
+    for (let i = 1; i < uData.length; i++) {
+      if (String(uData[i][0]).toLowerCase().trim() === targetEmail) {
+        uSheet.getRange(i + 1, 4).setValue(body.role || 'user');
+        break;
+      }
+    }
+    // Sync with AdminEmails sheet
+    const aSheet = getAdminSheet();
+    const aData = aSheet.getDataRange().getValues();
+    if (body.role === 'admin') {
+      const exists = aData.slice(1).some(r => String(r[0]).toLowerCase().trim() === targetEmail);
+      if (!exists) aSheet.appendRow([body.email.trim(), new Date().toISOString()]);
+    } else {
+      for (let i = 1; i < aData.length; i++) {
+        if (String(aData[i][0]).toLowerCase().trim() === targetEmail) { aSheet.deleteRow(i + 1); break; }
+      }
+    }
 
   // ── Admin Management ─────────────────────────────
   } else if (body.action === 'addAdmin') {
@@ -325,6 +375,17 @@ function getTechSheet() {
   const ss = SpreadsheetApp.getActiveSpreadsheet();
   let sheet = ss.getSheetByName('TechEmails');
   if (!sheet) { sheet = ss.insertSheet('TechEmails'); sheet.appendRow(['email','addedAt']); sheet.setFrozenRows(1); }
+  return sheet;
+}
+
+function getUsersSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Users');
+  if (!sheet) {
+    sheet = ss.insertSheet('Users');
+    sheet.appendRow(['email', 'branch', 'registeredAt', 'role']);
+    sheet.setFrozenRows(1);
+  }
   return sheet;
 }
 
