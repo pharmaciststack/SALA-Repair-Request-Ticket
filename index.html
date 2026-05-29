@@ -290,10 +290,15 @@
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-800 mb-2">📸 แนบรูปภาพ(ถ้ามี)</label>
-              <div id="image-preview" class="grid grid-cols-2 gap-2 mb-3"></div>
-              <input id="f-images" type="file" accept="image/*" multiple onchange="previewImages(event)"
-                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm cursor-pointer hover:border-amber-300 transition-colors">
-              <p class="text-xs text-gray-400 mt-1">แนบได้หลายรูป (ไม่เกิน 5 MB ต่อรูป)</p>
+              <div id="image-preview" class="grid grid-cols-3 gap-2 mb-2"></div>
+              <div id="upload-zone" onclick="document.getElementById('f-images').click()"
+                class="w-full border-2 border-dashed border-gray-300 hover:border-amber-400 rounded-xl py-4 px-3 text-center cursor-pointer transition-all hover:bg-amber-50">
+                <i data-lucide="image-plus" style="width:22px;height:22px;color:#9ca3af;margin:0 auto 4px;display:block;"></i>
+                <p class="text-sm text-gray-500">คลิกเพื่อเพิ่มรูปภาพ</p>
+                <p class="text-xs text-gray-400 mt-0.5">เพิ่มได้สูงสุด 8 รูป · ไม่เกิน 5 MB ต่อรูป</p>
+                <span id="image-count" class="hidden text-xs font-semibold text-amber-600 mt-1 block"></span>
+              </div>
+              <input id="f-images" type="file" accept="image/*" multiple onchange="addImages(event)" class="hidden">
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-800 mb-2">📝 รายละเอียดปัญหา <span class="text-red-500">*</span></label>
@@ -1144,25 +1149,51 @@ function generateRepairReport(id) {
 // ==================== Image Preview ====================
 let imageFiles = []; // keep File refs for upload
 
-function previewImages(event) {
-  imageDataURLs = [];
-  imageFiles = [];
-  const preview = document.getElementById('image-preview');
-  preview.innerHTML = '';
-  Array.from(event.target.files).slice(0, 8).forEach(file => {
+function addImages(event) {
+  const newFiles = Array.from(event.target.files);
+  event.target.value = '';
+  const remaining = 8 - imageFiles.length;
+  if (remaining <= 0) { showToast('เพิ่มรูปได้สูงสุด 8 รูปเท่านั้น', 'error'); return; }
+  if (newFiles.length > remaining) showToast('เพิ่มได้อีกแค่ ' + remaining + ' รูป', 'error');
+  newFiles.slice(0, remaining).forEach(file => {
     if (file.size > 5 * 1024 * 1024) { showToast('รูปใหญ่เกิน 5 MB: ' + file.name, 'error'); return; }
-    imageFiles.push(file);
     const reader = new FileReader();
     reader.onload = e => {
+      imageFiles.push(file);
       imageDataURLs.push(e.target.result);
-      const img = document.createElement('img');
-      img.src = e.target.result;
-      img.className = 'img-thumb cursor-pointer';
-      img.onclick = () => openImgModal(e.target.result);
-      preview.appendChild(img);
+      renderImagePreview();
     };
     reader.readAsDataURL(file);
   });
+}
+
+function removeImage(index) {
+  imageFiles.splice(index, 1);
+  imageDataURLs.splice(index, 1);
+  renderImagePreview();
+}
+
+function renderImagePreview() {
+  const preview = document.getElementById('image-preview');
+  const countEl = document.getElementById('image-count');
+  const zone    = document.getElementById('upload-zone');
+  preview.innerHTML = imageDataURLs.map((url, i) => `
+    <div class="relative">
+      <img src="${escHtml(url)}" class="img-thumb cursor-pointer" onclick="openImgModal('${escHtml(url)}')">
+      <button type="button" onclick="removeImage(${i})"
+        class="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white rounded-full leading-none flex items-center justify-center"
+        style="width:18px;height:18px;font-size:11px;transform:translate(35%,-35%);">✕</button>
+    </div>`).join('');
+  if (imageFiles.length > 0) {
+    countEl.textContent = imageFiles.length + '/8 รูป';
+    countEl.classList.remove('hidden');
+  } else {
+    countEl.classList.add('hidden');
+  }
+  const full = imageFiles.length >= 8;
+  zone.style.opacity = full ? '0.4' : '1';
+  zone.style.pointerEvents = full ? 'none' : 'auto';
+  lucide.createIcons();
 }
 
 // ==================== Image Upload to Drive ====================
@@ -1248,9 +1279,9 @@ async function handleSubmit(event) {
   document.getElementById('f-name').value = currentUser?.name || '';
   document.getElementById('f-email').value = currentUser?.email || '';
   document.getElementById('f-device-id').value = '';
-  document.getElementById('image-preview').innerHTML = '';
   imageDataURLs = [];
   imageFiles = [];
+  renderImagePreview();
   document.querySelector('input[name="urgency"][value="low"]').checked = true;
   btn.disabled = false;
   btn.innerHTML = '<i data-lucide="send" style="width:18px;height:18px;"></i> ส่งแบบฟอร์มแจ้งซ่อม';
