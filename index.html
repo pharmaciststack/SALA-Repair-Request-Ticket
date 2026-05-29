@@ -124,10 +124,9 @@
     </div>
     <div class="mb-4">
       <label class="block text-sm font-semibold text-gray-700 mb-2">🏢 สาขาของคุณ <span class="text-red-500">*</span></label>
-      <input id="reg-branch" type="text" placeholder="พิมพ์เพื่อค้นหาสาขา..." list="reg-branch-list"
-        autocomplete="off"
-        class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
-      <datalist id="reg-branch-list"></datalist>
+      <select id="reg-branch" class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all bg-white">
+        <option value="">-- เลือกสาขา --</option>
+      </select>
     </div>
     <p id="reg-error" class="text-xs text-red-500 mb-3 hidden"></p>
     <button id="reg-submit-btn" onclick="submitRegistration()"
@@ -702,14 +701,6 @@ async function submitRegistration() {
   const btn = document.getElementById('reg-submit-btn');
   btn.disabled = true; btn.textContent = 'กำลังลงทะเบียน...';
   try {
-    if (!BRANCH_LIST.includes(branch)) {
-      errEl.textContent = 'กรุณาเลือกสาขาจากรายการที่กำหนดเท่านั้น';
-      errEl.classList.remove('hidden');
-      btn.disabled = false;
-      btn.innerHTML = '<i data-lucide="user-check" style="width:18px;height:18px;"></i> ลงทะเบียน';
-      lucide.createIcons();
-      return;
-    }
     const result = await apiPost({ action: 'registerUser', branch });
     if (!result.ok) throw new Error(result.error || 'Save failed');
     document.getElementById('register-modal').style.setProperty('display', 'none', 'important');
@@ -1496,12 +1487,12 @@ document.addEventListener('DOMContentLoaded', () => {
     opt.value = b; opt.textContent = b;
     sel.appendChild(opt);
   });
-  // Populate registration branch datalist
-  const regDl = document.getElementById('reg-branch-list');
+  // Populate registration branch select
+  const regSel = document.getElementById('reg-branch');
   BRANCH_LIST.forEach(b => {
     const opt = document.createElement('option');
-    opt.value = b;
-    regDl.appendChild(opt);
+    opt.value = b; opt.textContent = b;
+    regSel.appendChild(opt);
   });
   lucide.createIcons();
 });
