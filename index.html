@@ -42,6 +42,11 @@
     #login-screen { transition: opacity 0.4s ease; }
     #login-screen.hiding { opacity: 0; pointer-events: none; }
     .google-btn-wrap { display: flex; justify-content: center; margin-top: 8px; }
+    @media (max-width: 639px) {
+      #user-name-wrap { display: none !important; }
+      #record-count-badge { display: none !important; }
+      #admin-badge { display: none !important; }
+    }
   </style>
 </head>
 <body class="h-full bg-gray-50">
@@ -446,6 +451,36 @@
   <!-- ===== Image Modal ===== -->
   <div id="img-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay" onclick="closeImgModal()">
     <img id="img-modal-src" src="" class="max-w-[90vw] max-h-[90vh] rounded-xl shadow-2xl object-contain">
+  </div>
+
+  <!-- ===== Self-Close Modal ===== -->
+  <div id="self-close-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay" onclick="if(event.target===this)cancelSelfClose()">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 fade-in">
+      <div class="flex items-center gap-3 mb-3">
+        <span class="w-10 h-10 bg-orange-50 rounded-xl flex items-center justify-center shrink-0">
+          <i data-lucide="x-circle" style="width:20px;height:20px;color:#ea580c;"></i>
+        </span>
+        <div>
+          <h3 class="text-base font-bold text-gray-900">ปิดคำขอซ่อมเอง</h3>
+          <p class="text-xs text-gray-400">ระบุเหตุผลก่อนปิด — สถานะจะเปลี่ยนเป็น เสร็จสิ้น ทันที</p>
+        </div>
+      </div>
+      <textarea id="self-close-note" rows="3"
+        placeholder="เช่น แก้ไขได้เองแล้ว / ไม่ต้องซ่อมแล้ว / ยกเลิกคำขอ ..."
+        class="w-full border-2 border-gray-200 rounded-xl px-4 py-3 text-sm resize-none transition-all mb-1"
+        oninput="document.getElementById('self-close-error').classList.add('hidden')"></textarea>
+      <p id="self-close-error" class="hidden text-xs text-red-500 mb-3">กรุณาใส่หมายเหตุก่อนยืนยัน</p>
+      <div class="flex gap-3 mt-3">
+        <button onclick="cancelSelfClose()"
+          class="flex-1 border-2 border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold py-2.5 rounded-xl transition-all text-sm">
+          ยกเลิก
+        </button>
+        <button onclick="confirmSelfClose()"
+          class="flex-1 bg-orange-500 hover:bg-orange-600 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
+          <i data-lucide="check-circle" style="width:15px;height:15px;"></i> ยืนยันปิดคำขอ
+        </button>
+      </div>
+    </div>
   </div>
 
   <!-- ===== SETTINGS VIEW (Super Admin only) ===== -->
@@ -1321,8 +1356,15 @@ function renderUserTickets() {
       <p class="text-sm text-gray-700 mt-2 line-clamp-2">${escHtml(t.desc)}</p>
       ${t.note ? `<p class="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">💬 หมายเหตุช่าง: ${escHtml(t.note)}</p>` : ''}
       ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.slice(0,3).map(img =>
-        `<img src="${escHtml(img)}" class="h-14 w-20 object-cover rounded-lg border-2 border-gray-200 cursor-pointer" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)">`).join('')}</div>` : ''}
-      <p class="text-xs text-gray-400 mt-2">${formatDate(t.createdAt)}</p>
+        `<img src="${escHtml(img)}" class="h-14 w-20 object-cover rounded-lg border-2 border-gray-200 cursor-pointer" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)" onerror="this.style.display='none'">`).join('')}</div>` : ''}
+      <div class="flex items-center justify-between mt-2">
+        <p class="text-xs text-gray-400">${formatDate(t.createdAt)}</p>
+        ${t.status !== 'done' ? `
+        <button onclick="openSelfCloseModal(${t.id})"
+          class="flex items-center gap-1.5 text-xs text-orange-500 hover:text-orange-700 border border-orange-200 hover:border-orange-400 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-all font-medium">
+          <i data-lucide="x-circle" style="width:13px;height:13px;"></i> ปิดคำขอเอง
+        </button>` : ''}
+      </div>
     </div>`).join('');
   lucide.createIcons();
 }
@@ -1489,6 +1531,54 @@ function openImgModal(src) {
 function closeImgModal() {
   const m = document.getElementById('img-modal');
   m.classList.add('hidden'); m.classList.remove('flex');
+}
+
+// ==================== Self-Close Modal ====================
+let _selfCloseId = null;
+
+function openSelfCloseModal(id) {
+  _selfCloseId = id;
+  document.getElementById('self-close-note').value = '';
+  document.getElementById('self-close-error').classList.add('hidden');
+  const m = document.getElementById('self-close-modal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+  lucide.createIcons();
+  setTimeout(() => document.getElementById('self-close-note').focus(), 100);
+}
+
+function cancelSelfClose() {
+  const m = document.getElementById('self-close-modal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+  _selfCloseId = null;
+}
+
+async function confirmSelfClose() {
+  const note = document.getElementById('self-close-note').value.trim();
+  if (!note) {
+    document.getElementById('self-close-error').classList.remove('hidden');
+    return;
+  }
+  const t = tickets.find(t => t.id === _selfCloseId);
+  if (!t) { cancelSelfClose(); return; }
+
+  t.status = 'done';
+  t.note = note;
+  t.updatedAt = new Date().toISOString();
+
+  if (useSheets) {
+    setLoading(true);
+    await apiPost({ action: 'update', id: _selfCloseId, field: 'status', value: 'done' });
+    await apiPost({ action: 'update', id: _selfCloseId, field: 'note', value: note });
+    setLoading(false);
+  } else {
+    try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {}
+  }
+
+  cancelSelfClose();
+  updateStats();
+  renderUserTickets();
+  renderAdminTickets();
+  showToast('ปิดคำขอซ่อมเรียบร้อย #' + String(t.id).slice(-5), 'success');
 }
 
 // ==================== Helpers ====================
