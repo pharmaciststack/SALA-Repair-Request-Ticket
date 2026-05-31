@@ -1437,8 +1437,8 @@ function renderAdminTickets() {
       </div>
       ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.map(img =>
         `<img src="${escHtml(img)}" class="h-16 w-24 object-cover rounded-lg border-2 border-gray-200 cursor-pointer hover:opacity-80 transition-opacity" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)">`).join('')}</div>` : ''}
-      <div class="mt-4 pt-4 border-t border-gray-100 flex gap-3 items-start">
-        <div class="w-44 shrink-0">
+      <div class="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
+        <div class="sm:w-44 shrink-0">
           <label class="text-xs font-semibold text-gray-600 mb-1 block">📌 อัปเดตสถานะ</label>
           <select onchange="updateStatus(${t.id}, this.value)"
             class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white transition-all">
@@ -1449,13 +1449,13 @@ function renderAdminTickets() {
         </div>
         <div class="flex-1">
           <label class="text-xs font-semibold text-gray-600 mb-1 block">💬 หมายเหตุช่าง</label>
-          <textarea id="note-${t.id}" rows="3" placeholder="เพิ่มหมายเหตุ..."
-            class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm transition-all mb-2 resize-none"
+          <textarea id="note-${t.id}" rows="4" placeholder="เพิ่มหมายเหตุ..."
+            class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm transition-all mb-2 resize-y"
             onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();saveNote(${t.id})}">${escHtml(t.note||'')}</textarea>
           <button onclick="saveNote(${t.id})"
             class="w-full bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all">💾 บันทึกหมายเหตุ</button>
         </div>
-        <div class="flex flex-col gap-2 shrink-0 self-end">
+        <div class="flex sm:flex-col gap-2 shrink-0 sm:self-end">
           ${t.status === 'done' ? `
           <button onclick="generateRepairReport(${t.id})"
             class="flex items-center gap-1 text-sm text-amber-600 hover:text-amber-700 border-2 border-amber-200 hover:border-amber-400 bg-amber-50 hover:bg-amber-100 px-3 py-2 rounded-lg transition-all font-medium">
