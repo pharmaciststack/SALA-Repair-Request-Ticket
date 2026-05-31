@@ -8,7 +8,7 @@
 const SHEET_NAME         = 'Tickets';
 const COMPANY            = 'บริษัท ศาลาโอสถรีเทล จำกัด';
 const SYSTEM_NAME        = 'ระบบแจ้งซ่อมบำรุง';
-const SYSTEM_URL         = 'https://goodyearzph.github.io/salaosot-repair-system/';
+const SYSTEM_URL         = 'https://pharmaciststack.github.io/SALA-Repair-Request-Ticket/';
 const GOOGLE_CLIENT_ID   = '854838901494-cuhmkrl29oj80i12apt7no01k763r3o2.apps.googleusercontent.com';
 const SUPER_ADMIN_EMAILS = ['pharmacist@salaosot.com', 'goodyearzph@gmail.com'];
 const ALLOWED_UPDATE_FIELDS = ['status', 'note'];

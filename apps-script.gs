@@ -7,7 +7,7 @@
 const SHEET_NAME  = 'Tickets';
 const COMPANY     = 'บริษัท ศาลาโอสถรีเทล จำกัด';
 const SYSTEM_NAME = 'ระบบแจ้งซ่อมบำรุง';
-const SYSTEM_URL  = 'https://goodyearzph.github.io/salaosot-repair-system/';
+const SYSTEM_URL  = 'https://pharmaciststack.github.io/SALA-Repair-Request-Ticket/';
 
 // ── doGet ─────────────────────────────────────────────
 function doGet(e) {
