@@ -602,8 +602,27 @@ let useSheets = false;
 let allUsers = [];
 
 // ==================== Sheets API ====================
-async function apiPost(body) {
+function getCredential() {
   const credential = sessionStorage.getItem('repair_credential') || '';
+  if (!credential) return null;
+  try {
+    const payload = parseJwt(credential);
+    if (payload.exp * 1000 < Date.now()) {
+      // Token expired — clear session and force re-login
+      sessionStorage.removeItem('repair_user');
+      sessionStorage.removeItem('repair_credential');
+      sessionStorage.removeItem('repair_reg_status');
+      showToast('เซสชันหมดอายุ กรุณาเข้าสู่ระบบใหม่', 'error');
+      setTimeout(() => location.reload(), 2000);
+      return null;
+    }
+  } catch(e) { return null; }
+  return credential;
+}
+
+async function apiPost(body) {
+  const credential = getCredential();
+  if (!credential) return { ok: false, error: 'Session expired' };
   const r = await fetch(APPS_SCRIPT_URL, {
     method: 'POST',
     headers: { 'Content-Type': 'text/plain' },
@@ -620,7 +639,8 @@ async function loadTickets() {
   }
   setLoading(true);
   try {
-    const credential = sessionStorage.getItem('repair_credential') || '';
+    const credential = getCredential();
+    if (!credential) { setLoading(false); return; }
     const r = await fetch(APPS_SCRIPT_URL + '?t=' + Date.now() + '&idToken=' + encodeURIComponent(credential), { redirect: 'follow' });
     const j = await r.json();
     tickets = (j.data || []).map(t => ({
