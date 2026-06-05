@@ -440,9 +440,24 @@
       <button onclick="refreshAdmin()" class="flex items-center gap-2 text-sm text-gray-500 hover:text-gray-700 border-2 border-gray-200 hover:border-gray-300 px-3 py-2.5 rounded-lg transition-all">
         <i data-lucide="refresh-cw" style="width:15px;height:15px;"></i> รีเฟรช
       </button>
-      <select id="filter-branch" onchange="renderAdminTickets()" class="ml-auto border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white transition-all">
-        <option value="">🏢 ทุกสาขา</option>
-      </select>
+      <div class="relative ml-auto" id="branch-filter-wrap">
+        <button onclick="toggleBranchDropdown()" id="branch-filter-btn"
+          class="border-2 border-gray-200 hover:border-gray-300 rounded-lg px-3 py-2.5 text-sm bg-white flex items-center gap-2 min-w-40 transition-all">
+          <span id="branch-filter-label">🏢 ทุกสาขา</span>
+          <i data-lucide="chevron-down" style="width:13px;height:13px;margin-left:auto;color:#9ca3af;"></i>
+        </button>
+        <div id="branch-dropdown" class="hidden absolute right-0 top-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-30 w-56 max-h-72 overflow-y-auto scroll-area">
+          <div class="p-2">
+            <label class="flex items-center gap-2 px-3 py-2 hover:bg-amber-50 rounded-lg cursor-pointer text-sm font-semibold text-amber-700">
+              <input type="checkbox" id="branch-all" onchange="toggleAllBranches(this)" checked
+                class="w-4 h-4 accent-amber-500 rounded">
+              ทุกสาขา
+            </label>
+            <hr class="my-1 border-gray-100">
+            <div id="branch-checkbox-list"></div>
+          </div>
+        </div>
+      </div>
     </div>
 
     <div id="ticket-list-admin" class="space-y-3"></div>
@@ -1395,7 +1410,7 @@ function renderAdminTickets() {
   const fStatus   = document.getElementById('filter-status').value;
   const fUrgency  = document.getElementById('filter-urgency').value;
   const fCat      = document.getElementById('filter-category').value;
-  const fBranch   = document.getElementById('filter-branch').value;
+  const fBranches = getSelectedBranches();
   const fOverdue  = document.getElementById('filter-overdue').value;
   const list = tickets.filter(t =>
     (!search || t.name.toLowerCase().includes(search) || t.branch.toLowerCase().includes(search) ||
@@ -1404,7 +1419,7 @@ function renderAdminTickets() {
     (!fStatus  || t.status  === fStatus) &&
     (!fUrgency || t.urgency === fUrgency) &&
     (!fCat     || t.category === fCat) &&
-    (!fBranch  || t.branch  === fBranch) &&
+    (!fBranches.length || fBranches.includes(t.branch)) &&
     (!fOverdue || isOverdue(t)));
 
   const container = document.getElementById('ticket-list-admin');
@@ -1553,6 +1568,40 @@ function closeImgModal() {
   m.classList.add('hidden'); m.classList.remove('flex');
 }
 
+// ==================== Branch Multi-Select ====================
+function toggleBranchDropdown() {
+  const dd = document.getElementById('branch-dropdown');
+  dd.classList.toggle('hidden');
+  lucide.createIcons();
+}
+document.addEventListener('click', e => {
+  const wrap = document.getElementById('branch-filter-wrap');
+  if (wrap && !wrap.contains(e.target)) {
+    document.getElementById('branch-dropdown')?.classList.add('hidden');
+  }
+});
+function getSelectedBranches() {
+  return Array.from(document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]:checked')).map(cb => cb.value);
+}
+function toggleAllBranches(allCb) {
+  document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]').forEach(cb => cb.checked = allCb.checked);
+  updateBranchLabel();
+  renderAdminTickets();
+}
+function onBranchCheckChange() {
+  const total = document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]').length;
+  const checked = getSelectedBranches().length;
+  document.getElementById('branch-all').checked = checked === total;
+  updateBranchLabel();
+  renderAdminTickets();
+}
+function updateBranchLabel() {
+  const selected = getSelectedBranches();
+  const total = document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]').length;
+  document.getElementById('branch-filter-label').textContent =
+    (!selected.length || selected.length === total) ? '🏢 ทุกสาขา' : `🏢 ${selected.length} สาขา`;
+}
+
 // ==================== Self-Close Modal ====================
 let _selfCloseId = null;
 
@@ -1632,12 +1681,13 @@ document.addEventListener('DOMContentLoaded', () => {
     opt.value = b;
     dl.appendChild(opt);
   });
-  // Populate branch filter select in admin
-  const sel = document.getElementById('filter-branch');
+  // Populate branch filter checkboxes
+  const branchList = document.getElementById('branch-checkbox-list');
   BRANCH_LIST.forEach(b => {
-    const opt = document.createElement('option');
-    opt.value = b; opt.textContent = b;
-    sel.appendChild(opt);
+    const label = document.createElement('label');
+    label.className = 'flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer text-sm text-gray-700';
+    label.innerHTML = `<input type="checkbox" value="${b}" checked onchange="onBranchCheckChange()" class="w-4 h-4 accent-amber-500 rounded"> ${b}`;
+    branchList.appendChild(label);
   });
   // Populate registration branch select
   const regSel = document.getElementById('reg-branch');
