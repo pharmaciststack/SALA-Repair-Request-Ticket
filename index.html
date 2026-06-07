@@ -1665,8 +1665,31 @@ function syncAllCheckbox() {
 function updateBranchLabel() {
   const selected = getSelectedBranches();
   const total = document.querySelectorAll('#branch-checkbox-list input.branch-cb').length;
-  document.getElementById('branch-filter-label').textContent =
-    (!selected.length || selected.length === total) ? '🏢 ทุกสาขา' : `🏢 ${selected.length} สาขา`;
+  let label;
+  if (!selected.length) {
+    label = '🏢 ไม่มีสาขา';
+  } else if (selected.length === total) {
+    label = '🏢 ทุกสาขา';
+  } else {
+    // หาโซนที่ถูกเลือกครบทุกสาขา
+    const fullZones = ZONE_LIST.filter(zone =>
+      zone.branches.every(b => selected.includes(b))
+    );
+    // หาสาขาที่เลือกแต่ไม่ได้อยู่ในโซนที่ครบ
+    const fullZoneBranches = fullZones.flatMap(z => z.branches);
+    const extra = selected.filter(b => !fullZoneBranches.includes(b));
+
+    if (fullZones.length && !extra.length) {
+      // เลือกครบตามโซน ไม่มีสาขาเสริม → แสดงชื่อโซน
+      label = '🏢 ' + fullZones.map(z => z.name).join(', ');
+    } else if (fullZones.length && extra.length) {
+      // มีโซนครบ + สาขาเสริม
+      label = '🏢 ' + fullZones.map(z => z.name).join(', ') + ` +${extra.length}`;
+    } else {
+      label = `🏢 ${selected.length} สาขา`;
+    }
+  }
+  document.getElementById('branch-filter-label').textContent = label;
 }
 
 // ==================== Self-Close Modal ====================
