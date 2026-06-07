@@ -75,9 +75,44 @@
     "06 เขาไร่ยา","07 แสนตุ้ง","08 เขาดิน","09 สอยดาว","10 ตลาดเจริญสุข",
     "11 โป่งน้ำร้อน","12 ทับช้าง","13 วังสมบูรณ์","14 ทุ่งขนาน","15 ตราด",
     "16 ออฟฟิศ","17 นายายอาม","18 คลองหาด","19 วังน้ำเย็น","20 เกาะลอย",
-    "21 เจ้าหลาว","23 อรัญประเทศ","24 บิ๊กซีจันทบุรี","25 แกลง","26 ตาพระยา",
+    "21 เกาะขวาง","23 อรัญประเทศ","24 บิ๊กซีจันทบุรี","25 แกลง","26 ตาพระยา",
     "27 โคกสูง","28 ขลุง","29 พลับพลา","30 วังน้ำเย็น2","31 ตลาดเทศบาลตราด",
-    "32 ตลาดพลิ้ว","33 เขาฉกรรจ์","34 วัฒนานคร","99 ศรีชัยโอสถ"
+    "32 ตลาดพลิ้ว","33 เขาฉกรรจ์","34 วัฒนานคร","35 หน้าโรงพยาบาลแกลง",
+    "36 วังท่าช้าง","99 ศรีชัยโอสถ"
+  ];
+
+  const ZONE_LIST = [
+    {
+      name: "โซนระยอง",
+      branches: [
+        "01 คลังรีเทล","02 เขาชะเมา","03 แก่งหางแมว","05 เมืองใหม่นายอาม",
+        "08 เขาดิน","17 นายายอาม","20 เกาะลอย","24 บิ๊กซีจันทบุรี",
+        "25 แกลง","35 หน้าโรงพยาบาลแกลง"
+      ]
+    },
+    {
+      name: "โซนจันทบุรี-ตราด",
+      branches: [
+        "06 เขาไร่ยา","07 แสนตุ้ง","10 ตลาดเจริญสุข","15 ตราด",
+        "16 ออฟฟิศ","21 เกาะขวาง","28 ขลุง","29 พลับพลา",
+        "31 ตลาดเทศบาลตราด","32 ตลาดพลิ้ว","99 ศรีชัยโอสถ"
+      ]
+    },
+    {
+      name: "โซนจันทบุรี-สระแก้ว",
+      branches: [
+        "09 สอยดาว","11 โป่งน้ำร้อน","12 ทับช้าง",
+        "13 วังสมบูรณ์","14 ทุ่งขนาน"
+      ]
+    },
+    {
+      name: "สระแก้ว",
+      branches: [
+        "04 สระแก้ว","18 คลองหาด","19 วังน้ำเย็น","23 อรัญประเทศ",
+        "26 ตาพระยา","27 โคกสูง","30 วังน้ำเย็น2","33 เขาฉกรรจ์",
+        "34 วัฒนานคร","36 วังท่าช้าง"
+      ]
+    }
   ];
 </script>
 <!-- ===================================================== -->
@@ -446,14 +481,14 @@
           <span id="branch-filter-label">🏢 ทุกสาขา</span>
           <i data-lucide="chevron-down" style="width:13px;height:13px;margin-left:auto;color:#9ca3af;"></i>
         </button>
-        <div id="branch-dropdown" class="hidden absolute right-0 top-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-30 w-56 max-h-72 overflow-y-auto scroll-area">
+        <div id="branch-dropdown" class="hidden absolute right-0 top-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-30 w-64 max-h-96 overflow-y-auto scroll-area">
           <div class="p-2">
             <label class="flex items-center gap-2 px-3 py-2 hover:bg-amber-50 rounded-lg cursor-pointer text-sm font-semibold text-amber-700">
               <input type="checkbox" id="branch-all" onchange="toggleAllBranches(this)" checked
                 class="w-4 h-4 accent-amber-500 rounded">
               ทุกสาขา
             </label>
-            <hr class="my-1 border-gray-100">
+            <hr class="my-1.5 border-gray-100">
             <div id="branch-checkbox-list"></div>
           </div>
         </div>
@@ -1581,23 +1616,55 @@ document.addEventListener('click', e => {
   }
 });
 function getSelectedBranches() {
-  return Array.from(document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]:checked')).map(cb => cb.value);
+  return Array.from(document.querySelectorAll('#branch-checkbox-list input.branch-cb:checked')).map(cb => cb.value);
 }
 function toggleAllBranches(allCb) {
-  document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]').forEach(cb => cb.checked = allCb.checked);
+  document.querySelectorAll('#branch-checkbox-list input').forEach(cb => cb.checked = allCb.checked);
   updateBranchLabel();
   renderAdminTickets();
 }
-function onBranchCheckChange() {
-  const total = document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]').length;
-  const checked = getSelectedBranches().length;
-  document.getElementById('branch-all').checked = checked === total;
+function toggleZone(zoneName, zoneCb) {
+  const zone = ZONE_LIST.find(z => z.name === zoneName);
+  if (!zone) return;
+  zone.branches.forEach(b => {
+    const cb = document.querySelector(`#branch-checkbox-list input.branch-cb[value="${CSS.escape(b)}"]`);
+    if (cb) cb.checked = zoneCb.checked;
+  });
+  syncAllCheckbox();
   updateBranchLabel();
   renderAdminTickets();
+}
+function onBranchCheckChange(zoneName) {
+  // sync zone header checkbox
+  if (zoneName) {
+    const zone = ZONE_LIST.find(z => z.name === zoneName);
+    if (zone) {
+      const total = zone.branches.length;
+      const checked = zone.branches.filter(b => {
+        const cb = document.querySelector(`#branch-checkbox-list input.branch-cb[value="${CSS.escape(b)}"]`);
+        return cb && cb.checked;
+      }).length;
+      const zoneCb = document.querySelector(`input.zone-cb[data-zone="${CSS.escape(zoneName)}"]`);
+      if (zoneCb) {
+        zoneCb.checked = checked === total;
+        zoneCb.indeterminate = checked > 0 && checked < total;
+      }
+    }
+  }
+  syncAllCheckbox();
+  updateBranchLabel();
+  renderAdminTickets();
+}
+function syncAllCheckbox() {
+  const total = document.querySelectorAll('#branch-checkbox-list input.branch-cb').length;
+  const checked = getSelectedBranches().length;
+  const allCb = document.getElementById('branch-all');
+  allCb.checked = checked === total;
+  allCb.indeterminate = checked > 0 && checked < total;
 }
 function updateBranchLabel() {
   const selected = getSelectedBranches();
-  const total = document.querySelectorAll('#branch-checkbox-list input[type="checkbox"]').length;
+  const total = document.querySelectorAll('#branch-checkbox-list input.branch-cb').length;
   document.getElementById('branch-filter-label').textContent =
     (!selected.length || selected.length === total) ? '🏢 ทุกสาขา' : `🏢 ${selected.length} สาขา`;
 }
@@ -1681,13 +1748,26 @@ document.addEventListener('DOMContentLoaded', () => {
     opt.value = b;
     dl.appendChild(opt);
   });
-  // Populate branch filter checkboxes
+  // Populate branch filter checkboxes (grouped by zone with zone header checkboxes)
   const branchList = document.getElementById('branch-checkbox-list');
-  BRANCH_LIST.forEach(b => {
-    const label = document.createElement('label');
-    label.className = 'flex items-center gap-2 px-3 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer text-sm text-gray-700';
-    label.innerHTML = `<input type="checkbox" value="${b}" checked onchange="onBranchCheckChange()" class="w-4 h-4 accent-amber-500 rounded"> ${b}`;
-    branchList.appendChild(label);
+  ZONE_LIST.forEach((zone, zi) => {
+    if (zi > 0) {
+      const sep = document.createElement('hr');
+      sep.className = 'my-1.5 border-gray-100';
+      branchList.appendChild(sep);
+    }
+    // Zone header with checkbox
+    const zoneLabel = document.createElement('label');
+    zoneLabel.className = 'flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 rounded-lg cursor-pointer text-sm font-semibold text-amber-700';
+    zoneLabel.innerHTML = `<input type="checkbox" class="zone-cb w-4 h-4 accent-amber-500 rounded" data-zone="${zone.name}" checked onchange="toggleZone('${zone.name}', this)"> ${zone.name}`;
+    branchList.appendChild(zoneLabel);
+    // Branch checkboxes (indented)
+    zone.branches.forEach(b => {
+      const label = document.createElement('label');
+      label.className = 'flex items-center gap-2 pl-7 pr-3 py-1 hover:bg-gray-50 rounded-lg cursor-pointer text-sm text-gray-700';
+      label.innerHTML = `<input type="checkbox" value="${b}" checked onchange="onBranchCheckChange('${zone.name}')" class="branch-cb w-3.5 h-3.5 accent-amber-500 rounded"> ${b}`;
+      branchList.appendChild(label);
+    });
   });
   // Populate registration branch select
   const regSel = document.getElementById('reg-branch');
