@@ -1438,7 +1438,7 @@ function renderUserTickets() {
       <i data-lucide="inbox" style="width:48px;height:48px;margin:0 auto 12px;opacity:0.4;"></i>
       <p class="text-sm font-medium">ยังไม่มีรายการแจ้งซ่อม</p>
       <p class="text-xs mt-1">กรอกแบบฟอร์มด้านซ้ายเพื่อแจ้งซ่อม</p></div>`;
-    lucide.createIcons(); return;
+    lucideIn(container); return;
   }
   container.innerHTML = myTickets.map(t => `
     <div class="border-2 border-gray-100 rounded-xl p-4 card-hover bg-gray-50 fade-in">
@@ -1467,7 +1467,7 @@ function renderUserTickets() {
         </button>` : ''}
       </div>
     </div>`).join('');
-  lucide.createIcons();
+  lucideIn(container);
 }
 
 // ==================== Render Admin Tickets ====================
@@ -1517,7 +1517,7 @@ function renderAdminTickets() {
     container.innerHTML = `<div class="text-center py-16 text-gray-400 bg-white rounded-xl shadow border border-gray-100">
       <i data-lucide="search-x" style="width:48px;height:48px;margin:0 auto 12px;opacity:0.4;"></i>
       <p class="text-sm font-medium">ไม่พบรายการ</p></div>`;
-    lucide.createIcons(); return;
+    lucideIn(container); return;
   }
   container.innerHTML = list.map(t => `
     <div class="bg-white rounded-xl shadow border-2 ${urgencyBorder(t.urgency)} p-5 card-hover fade-in">
@@ -1573,7 +1573,7 @@ function renderAdminTickets() {
         </div>
       </div>
     </div>`).join('');
-  lucide.createIcons();
+  lucideIn(container);
 }
 
 // ==================== Admin Actions ====================
@@ -1633,11 +1633,18 @@ async function refreshAdmin() {
 
 // ==================== Stats / Badge ====================
 function updateStats() {
+  let waiting = 0, progress = 0, done = 0, overdue = 0;
+  for (const t of tickets) {
+    if (t.status === 'waiting') waiting++;
+    else if (t.status === 'progress') progress++;
+    else if (t.status === 'done') done++;
+    if (isOverdue(t)) overdue++;
+  }
   document.getElementById('stat-total').textContent    = tickets.length;
-  document.getElementById('stat-waiting').textContent  = tickets.filter(t=>t.status==='waiting').length;
-  document.getElementById('stat-progress').textContent = tickets.filter(t=>t.status==='progress').length;
-  document.getElementById('stat-done').textContent     = tickets.filter(t=>t.status==='done').length;
-  document.getElementById('stat-overdue').textContent  = tickets.filter(t=>isOverdue(t)).length;
+  document.getElementById('stat-waiting').textContent  = waiting;
+  document.getElementById('stat-progress').textContent = progress;
+  document.getElementById('stat-done').textContent     = done;
+  document.getElementById('stat-overdue').textContent  = overdue;
   updateBadge();
 }
 function updateBadge() {
@@ -1862,6 +1869,22 @@ async function confirmSelfClose() {
 }
 
 // ==================== Helpers ====================
+// แปลง data-lucide เฉพาะภายใน container (scope) แทนการสแกนทั้งหน้าด้วย lucide.createIcons()
+function lucideIn(root){
+  if(!root || !window.lucide) return;
+  const toPascal = s => s.replace(/(^|-)(\w)/g, (_,__,c)=>c.toUpperCase());
+  root.querySelectorAll('[data-lucide]').forEach(el => {
+    const node = lucide.icons[toPascal(el.getAttribute('data-lucide'))];
+    if(!node) return;
+    const svg = lucide.createElement(node);
+    for(const a of Array.from(el.attributes)){
+      if(a.name === 'data-lucide') continue;
+      if(a.name === 'class'){ a.value.split(/\s+/).forEach(c=>c && svg.classList.add(c)); }
+      else svg.setAttribute(a.name, a.value);
+    }
+    el.parentNode.replaceChild(svg, el);
+  });
+}
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function urgencyLabel(v){ return {low:'🟢 ต่ำ (7-30วัน)',medium:'🟡 ปานกลาง (2-7วัน)',high:'🔴 ด่วนมาก (1-2วัน)'}[v]||v; }
 
