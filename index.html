@@ -444,7 +444,7 @@
       <div class="flex-1 min-w-48 relative">
         <i data-lucide="search" style="width:16px;height:16px;position:absolute;left:12px;top:50%;transform:translateY(-50%);color:#9ca3af;"></i>
         <input id="admin-search" type="text" placeholder="ค้นหาชื่อ, สาขา, อุปกรณ์..."
-          oninput="renderAdminTickets()"
+          oninput="debouncedAdminSearch()"
           class="w-full border-2 border-gray-200 rounded-lg pl-9 pr-4 py-2.5 text-sm transition-all">
       </div>
       <select id="filter-status" onchange="renderAdminTickets()" class="border-2 border-gray-200 rounded-lg px-3 py-2.5 text-sm bg-white">
@@ -882,8 +882,8 @@ async function loadAndRenderApp() {
   document.getElementById('user-email').textContent = currentUser.email;
   document.getElementById('user-name-wrap').classList.remove('hidden');
 
-  await loadDynamicAdmins();
-  await loadTechEmails();
+  // โหลด admins, techs, tickets พร้อมกัน (เป็น fetch อิสระ ไม่ขึ้นต่อกัน) แทนการรอทีละตัว
+  await Promise.all([loadDynamicAdmins(), loadTechEmails(), loadTickets()]);
 
   isAdmin = isSuperAdmin || dynamicAdmins.map(e=>e.toLowerCase()).includes(currentUser.email.toLowerCase());
 
@@ -899,7 +899,6 @@ async function loadAndRenderApp() {
   document.getElementById('f-name').value = currentUser.name;
   document.getElementById('f-email').value = currentUser.email;
 
-  await loadTickets();
   lucide.createIcons();
   renderUserTickets();
   updateBadge();
@@ -1472,6 +1471,12 @@ function renderUserTickets() {
 }
 
 // ==================== Render Admin Tickets ====================
+let _adminSearchTimer = null;
+function debouncedAdminSearch() {
+  clearTimeout(_adminSearchTimer);
+  _adminSearchTimer = setTimeout(renderAdminTickets, 250);
+}
+
 function renderAdminTickets() {
   const search    = document.getElementById('admin-search').value.toLowerCase();
   const fStatus   = document.getElementById('filter-status').value;
@@ -1575,19 +1580,31 @@ function renderAdminTickets() {
 async function updateStatus(id, status) {
   const t = tickets.find(t => t.id === id); if (!t) return;
   t.status = status; t.updatedAt = new Date().toISOString();
-  if (useSheets) await apiPost({ action: 'update', id, field: 'status', value: status });
-  else { try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {} }
+  // อัปเดตหน้าจอทันที (optimistic) แล้วค่อยยิง API เบื้องหลัง
   updateStats(); renderAdminTickets(); renderUserTickets();
-  showToast('อัปเดตสถานะสำเร็จ', 'success');
+  if (useSheets) {
+    apiPost({ action: 'update', id, field: 'status', value: status })
+      .then(() => showToast('อัปเดตสถานะสำเร็จ', 'success'))
+      .catch(() => showToast('บันทึกไม่สำเร็จ กรุณารีเฟรช', 'error'));
+  } else {
+    try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {}
+    showToast('อัปเดตสถานะสำเร็จ', 'success');
+  }
 }
 async function saveNote(id) {
   const t = tickets.find(t => t.id === id); if (!t) return;
   t.note = document.getElementById('note-'+id)?.value?.trim() || '';
   t.updatedAt = new Date().toISOString();
-  if (useSheets) await apiPost({ action: 'update', id, field: 'note', value: t.note });
-  else { try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {} }
+  // แสดงผลทันที แล้วยิง API เบื้องหลัง
   renderUserTickets();
-  showToast('บันทึกหมายเหตุแล้ว', 'success');
+  if (useSheets) {
+    apiPost({ action: 'update', id, field: 'note', value: t.note })
+      .then(() => showToast('บันทึกหมายเหตุแล้ว', 'success'))
+      .catch(() => showToast('บันทึกไม่สำเร็จ กรุณารีเฟรช', 'error'));
+  } else {
+    try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {}
+    showToast('บันทึกหมายเหตุแล้ว', 'success');
+  }
 }
 async function deleteTicket(id) {
   if (!confirm('ต้องการลบรายการนี้?')) return;
