@@ -81,36 +81,35 @@
     "36 วังท่าช้าง","99 ศรีชัยโอสถ"
   ];
 
+  // โซนตามรอบรถยา — 1 สาขาอยู่ได้หลายโซน (ตลาดเจริญสุข, ออฟฟิศ อยู่ทั้งตราด+ระยอง)
   const ZONE_LIST = [
     {
-      name: "โซนระยอง",
+      name: "โซนสระแก้ว",
+      days: "จ. / พฤ.",
       branches: [
-        "01 คลังรีเทล","02 เขาชะเมา","03 แก่งหางแมว","05 เมืองใหม่นายอาม",
-        "08 เขาดิน","17 นายายอาม","20 เกาะลอย","24 บิ๊กซีจันทบุรี",
-        "25 แกลง","35 หน้าโรงพยาบาลแกลง"
+        "04 สระแก้ว","09 สอยดาว","11 โป่งน้ำร้อน","12 ทับช้าง",
+        "13 วังสมบูรณ์","14 ทุ่งขนาน","18 คลองหาด","19 วังน้ำเย็น",
+        "23 อรัญประเทศ","26 ตาพระยา","27 โคกสูง","30 วังน้ำเย็น2",
+        "33 เขาฉกรรจ์","34 วัฒนานคร","36 วังท่าช้าง"
       ]
     },
     {
-      name: "โซนจันทบุรี-ตราด",
+      name: "โซนตราด",
+      days: "อ. / ศ.",
       branches: [
         "06 เขาไร่ยา","07 แสนตุ้ง","10 ตลาดเจริญสุข","15 ตราด",
-        "16 ออฟฟิศ","21 เกาะขวาง","28 ขลุง","29 พลับพลา",
-        "31 ตลาดเทศบาลตราด","32 ตลาดพลิ้ว","99 ศรีชัยโอสถ"
+        "16 ออฟฟิศ","21 เกาะขวาง","24 บิ๊กซีจันทบุรี","28 ขลุง",
+        "31 ตลาดเทศบาลตราด","32 ตลาดพลิ้ว"
       ]
     },
     {
-      name: "โซนจันทบุรี-สระแก้ว",
+      name: "โซนระยอง",
+      days: "พ. / ส.",
       branches: [
-        "09 สอยดาว","11 โป่งน้ำร้อน","12 ทับช้าง",
-        "13 วังสมบูรณ์","14 ทุ่งขนาน"
-      ]
-    },
-    {
-      name: "สระแก้ว",
-      branches: [
-        "04 สระแก้ว","18 คลองหาด","19 วังน้ำเย็น","23 อรัญประเทศ",
-        "26 ตาพระยา","27 โคกสูง","30 วังน้ำเย็น2","33 เขาฉกรรจ์",
-        "34 วัฒนานคร","36 วังท่าช้าง"
+        "01 คลังรีเทล","02 เขาชะเมา","03 แก่งหางแมว","05 เมืองใหม่นายอาม",
+        "08 เขาดิน","10 ตลาดเจริญสุข","16 ออฟฟิศ","17 นายายอาม",
+        "20 เกาะลอย","25 แกลง","29 พลับพลา","35 หน้าโรงพยาบาลแกลง",
+        "99 ศรีชัยโอสถ"
       ]
     }
   ];
@@ -487,9 +486,13 @@
           <span id="branch-filter-label">🏢 ทุกสาขา</span>
           <i data-lucide="chevron-down" style="width:13px;height:13px;margin-left:auto;color:#9ca3af;"></i>
         </button>
-        <div id="branch-dropdown" class="hidden absolute right-0 top-full mt-1 bg-white border-2 border-gray-200 rounded-xl shadow-xl z-30 w-64 max-h-96 overflow-y-auto scroll-area">
+        <!-- backdrop (เฉพาะมือถือ) -->
+        <div id="branch-backdrop" class="hidden fixed inset-0 bg-black/40 z-40 sm:hidden" onclick="toggleBranchDropdown()"></div>
+        <div id="branch-dropdown" class="hidden bg-white border-2 border-gray-200 shadow-xl overflow-y-auto scroll-area
+             fixed inset-x-3 top-1/2 -translate-y-1/2 z-50 rounded-2xl max-h-[80vh]
+             sm:absolute sm:inset-x-auto sm:right-0 sm:top-full sm:translate-y-0 sm:mt-1 sm:rounded-xl sm:w-72 sm:max-h-96">
           <div class="p-2">
-            <label class="flex items-center gap-2 px-3 py-2 hover:bg-amber-50 rounded-lg cursor-pointer text-sm font-semibold text-amber-700">
+            <label class="flex items-center gap-2 px-3 py-2.5 hover:bg-amber-50 rounded-lg cursor-pointer text-sm font-semibold text-amber-700">
               <input type="checkbox" id="branch-all" onchange="toggleAllBranches(this)" checked
                 class="w-4 h-4 accent-amber-500 rounded">
               ทุกสาขา
@@ -1734,57 +1737,65 @@ function toDateInput(d) {
 // ==================== Branch Multi-Select ====================
 function toggleBranchDropdown() {
   const dd = document.getElementById('branch-dropdown');
-  dd.classList.toggle('hidden');
+  const bd = document.getElementById('branch-backdrop');
+  const hidden = dd.classList.toggle('hidden');
+  bd?.classList.toggle('hidden', hidden);
   lucide.createIcons();
 }
 document.addEventListener('click', e => {
   const wrap = document.getElementById('branch-filter-wrap');
   if (wrap && !wrap.contains(e.target)) {
     document.getElementById('branch-dropdown')?.classList.add('hidden');
+    document.getElementById('branch-backdrop')?.classList.add('hidden');
   }
 });
+// คืนรายการสาขาที่เลือก (ไม่ซ้ำ — เผื่อสาขาเดียวอยู่หลายโซน)
 function getSelectedBranches() {
-  return Array.from(document.querySelectorAll('#branch-checkbox-list input.branch-cb:checked')).map(cb => cb.value);
+  return [...new Set(Array.from(document.querySelectorAll('#branch-checkbox-list input.branch-cb:checked')).map(cb => cb.value))];
+}
+// ตั้งค่า checkbox ของสาขาทุก instance (สาขาเดียวอาจโผล่หลายโซน) ให้ตรงกัน
+function setBranchChecked(value, checked) {
+  document.querySelectorAll(`#branch-checkbox-list input.branch-cb[value="${CSS.escape(value)}"]`)
+    .forEach(cb => cb.checked = checked);
 }
 function toggleAllBranches(allCb) {
-  document.querySelectorAll('#branch-checkbox-list input').forEach(cb => cb.checked = allCb.checked);
+  document.querySelectorAll('#branch-checkbox-list input.branch-cb').forEach(cb => cb.checked = allCb.checked);
+  syncAllZoneHeaders();
   updateBranchLabel();
   renderAdminTickets();
 }
 function toggleZone(zoneName, zoneCb) {
   const zone = ZONE_LIST.find(z => z.name === zoneName);
   if (!zone) return;
-  zone.branches.forEach(b => {
-    const cb = document.querySelector(`#branch-checkbox-list input.branch-cb[value="${CSS.escape(b)}"]`);
-    if (cb) cb.checked = zoneCb.checked;
-  });
+  zone.branches.forEach(b => setBranchChecked(b, zoneCb.checked));
+  syncAllZoneHeaders();
   syncAllCheckbox();
   updateBranchLabel();
   renderAdminTickets();
 }
-function onBranchCheckChange(zoneName) {
-  // sync zone header checkbox
-  if (zoneName) {
-    const zone = ZONE_LIST.find(z => z.name === zoneName);
-    if (zone) {
-      const total = zone.branches.length;
-      const checked = zone.branches.filter(b => {
-        const cb = document.querySelector(`#branch-checkbox-list input.branch-cb[value="${CSS.escape(b)}"]`);
-        return cb && cb.checked;
-      }).length;
-      const zoneCb = document.querySelector(`input.zone-cb[data-zone="${CSS.escape(zoneName)}"]`);
-      if (zoneCb) {
-        zoneCb.checked = checked === total;
-        zoneCb.indeterminate = checked > 0 && checked < total;
-      }
-    }
-  }
+function onBranchCheckChange(cbEl) {
+  // sync ทุก instance ของสาขาเดียวกันข้ามโซน
+  if (cbEl) setBranchChecked(cbEl.value, cbEl.checked);
+  syncAllZoneHeaders();
   syncAllCheckbox();
   updateBranchLabel();
   renderAdminTickets();
+}
+// คำนวณสถานะหัวโซนทุกโซน (ติ๊กครบ / ขีดครึ่ง)
+function syncAllZoneHeaders() {
+  ZONE_LIST.forEach(zone => {
+    const checked = zone.branches.filter(b =>
+      document.querySelector(`#branch-checkbox-list input.branch-cb[value="${CSS.escape(b)}"]:checked`)
+    ).length;
+    const zoneCb = document.querySelector(`input.zone-cb[data-zone="${CSS.escape(zone.name)}"]`);
+    if (zoneCb) {
+      zoneCb.checked = checked === zone.branches.length;
+      zoneCb.indeterminate = checked > 0 && checked < zone.branches.length;
+    }
+  });
 }
 function syncAllCheckbox() {
-  const total = document.querySelectorAll('#branch-checkbox-list input.branch-cb').length;
+  const total = BRANCH_LIST.length;
   const checked = getSelectedBranches().length;
   const allCb = document.getElementById('branch-all');
   allCb.checked = checked === total;
@@ -1792,7 +1803,7 @@ function syncAllCheckbox() {
 }
 function updateBranchLabel() {
   const selected = getSelectedBranches();
-  const total = document.querySelectorAll('#branch-checkbox-list input.branch-cb').length;
+  const total = BRANCH_LIST.length;
   let label;
   if (!selected.length) {
     label = '🏢 ไม่มีสาขา';
@@ -1800,19 +1811,15 @@ function updateBranchLabel() {
     label = '🏢 ทุกสาขา';
   } else {
     // หาโซนที่ถูกเลือกครบทุกสาขา
-    const fullZones = ZONE_LIST.filter(zone =>
-      zone.branches.every(b => selected.includes(b))
-    );
-    // หาสาขาที่เลือกแต่ไม่ได้อยู่ในโซนที่ครบ
-    const fullZoneBranches = fullZones.flatMap(z => z.branches);
+    const fullZones = ZONE_LIST.filter(zone => zone.branches.every(b => selected.includes(b)));
+    const fullZoneBranches = [...new Set(fullZones.flatMap(z => z.branches))];
     const extra = selected.filter(b => !fullZoneBranches.includes(b));
+    const zoneText = fullZones.map(z => `${z.name} [${z.days}]`).join(', ');
 
     if (fullZones.length && !extra.length) {
-      // เลือกครบตามโซน ไม่มีสาขาเสริม → แสดงชื่อโซน
-      label = '🏢 ' + fullZones.map(z => z.name).join(', ');
+      label = '🏢 ' + zoneText;
     } else if (fullZones.length && extra.length) {
-      // มีโซนครบ + สาขาเสริม
-      label = '🏢 ' + fullZones.map(z => z.name).join(', ') + ` +${extra.length}`;
+      label = '🏢 ' + zoneText + ` +${extra.length}`;
     } else {
       label = `🏢 ${selected.length} สาขา`;
     }
@@ -1917,22 +1924,28 @@ document.addEventListener('DOMContentLoaded', () => {
   });
   // Populate branch filter checkboxes (grouped by zone with zone header checkboxes)
   const branchList = document.getElementById('branch-checkbox-list');
+  // นับว่าสาขาไหนอยู่หลายโซน → ใส่ไอคอน 🔁
+  const branchZoneCount = {};
+  ZONE_LIST.forEach(z => z.branches.forEach(b => { branchZoneCount[b] = (branchZoneCount[b]||0)+1; }));
   ZONE_LIST.forEach((zone, zi) => {
     if (zi > 0) {
       const sep = document.createElement('hr');
       sep.className = 'my-1.5 border-gray-100';
       branchList.appendChild(sep);
     }
-    // Zone header with checkbox
+    // Zone header with checkbox + day badge
     const zoneLabel = document.createElement('label');
-    zoneLabel.className = 'flex items-center gap-2 px-3 py-1.5 hover:bg-amber-50 rounded-lg cursor-pointer text-sm font-semibold text-amber-700';
-    zoneLabel.innerHTML = `<input type="checkbox" class="zone-cb w-4 h-4 accent-amber-500 rounded" data-zone="${zone.name}" checked onchange="toggleZone('${zone.name}', this)"> ${zone.name}`;
+    zoneLabel.className = 'flex items-center gap-2 px-3 py-2 hover:bg-amber-50 rounded-lg cursor-pointer text-sm font-semibold text-amber-700';
+    zoneLabel.innerHTML = `<input type="checkbox" class="zone-cb w-4 h-4 accent-amber-500 rounded" data-zone="${zone.name}" checked onchange="toggleZone('${zone.name}', this)"> `
+      + `<span>${zone.name}</span>`
+      + `<span class="ml-auto text-[11px] font-medium text-amber-600 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded-md whitespace-nowrap">${zone.days}</span>`;
     branchList.appendChild(zoneLabel);
     // Branch checkboxes (indented)
     zone.branches.forEach(b => {
+      const multi = branchZoneCount[b] > 1 ? ' <span title="สาขาผ่านหลายโซน">🔁</span>' : '';
       const label = document.createElement('label');
-      label.className = 'flex items-center gap-2 pl-7 pr-3 py-1 hover:bg-gray-50 rounded-lg cursor-pointer text-sm text-gray-700';
-      label.innerHTML = `<input type="checkbox" value="${b}" checked onchange="onBranchCheckChange('${zone.name}')" class="branch-cb w-3.5 h-3.5 accent-amber-500 rounded"> ${b}`;
+      label.className = 'flex items-center gap-2 pl-7 pr-3 py-1.5 hover:bg-gray-50 rounded-lg cursor-pointer text-sm text-gray-700';
+      label.innerHTML = `<input type="checkbox" value="${b}" checked onchange="onBranchCheckChange(this)" class="branch-cb w-3.5 h-3.5 accent-amber-500 rounded"> ${b}${multi}`;
       branchList.appendChild(label);
     });
   });
