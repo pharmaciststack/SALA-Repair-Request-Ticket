@@ -568,6 +568,92 @@
     </div>
   </div>
 
+  <!-- ===== Edit Ticket Modal (User) ===== -->
+  <div id="edit-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay overflow-y-auto py-6" onclick="if(event.target===this)cancelEdit()">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 fade-in my-auto">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="w-10 h-10 bg-amber-50 rounded-xl flex items-center justify-center shrink-0">
+          <i data-lucide="pencil" style="width:20px;height:20px;color:#d97706;"></i>
+        </span>
+        <div>
+          <h3 class="text-base font-bold text-gray-900">แก้ไขคำขอแจ้งซ่อม</h3>
+          <p class="text-xs text-gray-400">แก้ไขรายละเอียด / เพิ่มรูปภาพได้</p>
+        </div>
+      </div>
+      <div class="space-y-3">
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">🔧 อุปกรณ์ <span class="text-red-500">*</span></label>
+          <input id="edit-equip" type="text" class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm transition-all"
+            oninput="document.getElementById('edit-error').classList.add('hidden')">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">🏷️ รหัสอุปกรณ์</label>
+          <input id="edit-deviceId" type="text" class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm transition-all">
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">📂 หมวดหมู่</label>
+          <select id="edit-category" class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white transition-all">
+            <option value="electrical">⚡ ระบบไฟฟ้า</option>
+            <option value="plumbing">🚿 ระบบประปา</option>
+            <option value="ac">❄️ เครื่องปรับอากาศ</option>
+            <option value="computer">💻 คอมพิวเตอร์ / IT</option>
+            <option value="furniture">🪑 เฟอร์นิเจอร์</option>
+            <option value="other">🔩 อื่นๆ</option>
+          </select>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">📝 รายละเอียด</label>
+          <textarea id="edit-desc" rows="3" class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm resize-y transition-all"></textarea>
+        </div>
+        <div>
+          <label class="block text-xs font-semibold text-gray-700 mb-1">📸 รูปภาพ</label>
+          <div id="picker-edit" class="grid grid-cols-3 gap-2 mb-2"></div>
+          <div onclick="document.getElementById('edit-images-input').click()"
+            class="w-full border-2 border-dashed border-gray-300 hover:border-amber-400 rounded-xl py-3 text-center cursor-pointer transition-all hover:bg-amber-50">
+            <i data-lucide="image-plus" style="width:20px;height:20px;color:#9ca3af;margin:0 auto 2px;display:block;"></i>
+            <p class="text-xs text-gray-500">คลิกเพื่อเพิ่มรูป (สูงสุด 5 รูป)</p>
+          </div>
+          <input id="edit-images-input" type="file" accept="image/*" multiple class="hidden" onchange="pickerAdd('edit', this)">
+        </div>
+      </div>
+      <p id="edit-error" class="hidden text-xs text-red-500 mt-2"></p>
+      <div class="flex gap-3 mt-5">
+        <button onclick="cancelEdit()" class="flex-1 border-2 border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold py-2.5 rounded-xl transition-all text-sm">ยกเลิก</button>
+        <button id="edit-save-btn" onclick="confirmEdit()" class="flex-1 bg-amber-500 hover:bg-amber-600 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
+          <i data-lucide="save" style="width:15px;height:15px;"></i> บันทึกการแก้ไข
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===== Proof-of-Completion Modal (Admin) ===== -->
+  <div id="proof-modal" class="fixed inset-0 z-50 hidden items-center justify-center modal-overlay overflow-y-auto py-6" onclick="if(event.target===this)cancelProof()">
+    <div class="bg-white rounded-2xl shadow-2xl p-6 w-full max-w-md mx-4 fade-in my-auto">
+      <div class="flex items-center gap-3 mb-4">
+        <span class="w-10 h-10 bg-green-50 rounded-xl flex items-center justify-center shrink-0">
+          <i data-lucide="camera" style="width:20px;height:20px;color:#16a34a;"></i>
+        </span>
+        <div>
+          <h3 class="text-base font-bold text-gray-900">รูปหลักฐานการปิดงานซ่อม</h3>
+          <p class="text-xs text-gray-400">แนบรูปก่อน/หลังซ่อม เพื่อยืนยันการปิดงาน</p>
+        </div>
+      </div>
+      <div id="picker-proof" class="grid grid-cols-3 gap-2 mb-2"></div>
+      <div onclick="document.getElementById('proof-images-input').click()"
+        class="w-full border-2 border-dashed border-gray-300 hover:border-green-400 rounded-xl py-3 text-center cursor-pointer transition-all hover:bg-green-50">
+        <i data-lucide="image-plus" style="width:20px;height:20px;color:#9ca3af;margin:0 auto 2px;display:block;"></i>
+        <p class="text-xs text-gray-500">คลิกเพื่อเพิ่มรูปหลักฐาน (สูงสุด 5 รูป)</p>
+      </div>
+      <input id="proof-images-input" type="file" accept="image/*" multiple class="hidden" onchange="pickerAdd('proof', this)">
+      <div class="flex gap-3 mt-5">
+        <button onclick="cancelProof()" class="flex-1 border-2 border-gray-200 hover:bg-gray-50 text-gray-600 font-semibold py-2.5 rounded-xl transition-all text-sm">ยกเลิก</button>
+        <button id="proof-save-btn" onclick="confirmProof()" class="flex-1 bg-green-500 hover:bg-green-600 active:scale-95 text-white font-bold py-2.5 rounded-xl transition-all text-sm flex items-center justify-center gap-2">
+          <i data-lucide="save" style="width:15px;height:15px;"></i> บันทึกรูปหลักฐาน
+        </button>
+      </div>
+    </div>
+  </div>
+
   <!-- ===== SETTINGS VIEW (Super Admin only) ===== -->
   <main id="view-settings" class="hidden flex-1 max-w-3xl mx-auto w-full px-4 py-6 fade-in">
     <div class="bg-white rounded-xl shadow border border-gray-100 p-6">
@@ -730,7 +816,8 @@ async function loadTickets() {
     const j = await r.json();
     tickets = (j.data || []).map(t => ({
       ...t,
-      images: JSON.parse(String(t.images || '[]')),
+      images: safeParseArr(t.images),
+      proofImages: safeParseArr(t.proofImages),
     })).reverse();
   } catch(e) {
     showToast('โหลดข้อมูลไม่สำเร็จ', 'error');
@@ -1461,13 +1548,22 @@ function renderUserTickets() {
       ${t.note ? `<p class="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">💬 หมายเหตุช่าง: ${escHtml(t.note)}</p>` : ''}
       ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.slice(0,3).map(img =>
         `<img src="${escHtml(img)}" class="h-14 w-20 object-cover rounded-lg border-2 border-gray-200 cursor-pointer" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)" onerror="this.style.display='none'">`).join('')}</div>` : ''}
-      <div class="flex items-center justify-between mt-2">
+      ${t.proofImages?.length ? `<p class="text-xs text-green-600 mt-3 mb-1 font-medium">✅ รูปหลักฐานการปิดงาน</p>
+        <div class="flex gap-2 flex-wrap">${t.proofImages.slice(0,3).map(img =>
+        `<img src="${escHtml(img)}" class="h-14 w-20 object-cover rounded-lg border-2 border-green-200 cursor-pointer" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)" onerror="this.style.display='none'">`).join('')}</div>` : ''}
+      <div class="flex items-center justify-between mt-2 gap-2">
         <p class="text-xs text-gray-400">${formatDate(t.createdAt)}</p>
         ${t.status !== 'done' ? `
-        <button onclick="openSelfCloseModal(${t.id})"
-          class="flex items-center gap-1.5 text-xs text-orange-500 hover:text-orange-700 border border-orange-200 hover:border-orange-400 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-all font-medium">
-          <i data-lucide="x-circle" style="width:13px;height:13px;"></i> ปิดคำขอเอง
-        </button>` : ''}
+        <div class="flex gap-2">
+          <button onclick="openEditModal(${t.id})"
+            class="flex items-center gap-1.5 text-xs text-amber-600 hover:text-amber-800 border border-amber-200 hover:border-amber-400 bg-amber-50 hover:bg-amber-100 px-3 py-1.5 rounded-lg transition-all font-medium">
+            <i data-lucide="pencil" style="width:13px;height:13px;"></i> แก้ไข
+          </button>
+          <button onclick="openSelfCloseModal(${t.id})"
+            class="flex items-center gap-1.5 text-xs text-orange-500 hover:text-orange-700 border border-orange-200 hover:border-orange-400 bg-orange-50 hover:bg-orange-100 px-3 py-1.5 rounded-lg transition-all font-medium">
+            <i data-lucide="x-circle" style="width:13px;height:13px;"></i> ปิดคำขอเอง
+          </button>
+        </div>` : ''}
       </div>
     </div>`).join('');
   lucideIn(container);
@@ -1545,6 +1641,9 @@ function renderAdminTickets() {
       </div>
       ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.map(img =>
         `<img src="${escHtml(img)}" class="h-16 w-24 object-cover rounded-lg border-2 border-gray-200 cursor-pointer hover:opacity-80 transition-opacity" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)">`).join('')}</div>` : ''}
+      ${t.proofImages?.length ? `<p class="text-xs text-green-600 mt-3 mb-1 font-medium">✅ รูปหลักฐานการปิดงาน</p>
+        <div class="flex gap-2 flex-wrap">${t.proofImages.map(img =>
+        `<img src="${escHtml(img)}" class="h-16 w-24 object-cover rounded-lg border-2 border-green-200 cursor-pointer hover:opacity-80 transition-opacity" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)">`).join('')}</div>` : ''}
       <div class="mt-4 pt-4 border-t border-gray-100 flex flex-col sm:flex-row gap-3">
         <div class="sm:w-44 shrink-0">
           <label class="text-xs font-semibold text-gray-600 mb-1 block">📌 อัปเดตสถานะ</label>
@@ -1564,6 +1663,10 @@ function renderAdminTickets() {
             class="w-full bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all">💾 บันทึกหมายเหตุ</button>
         </div>
         <div class="flex sm:flex-col gap-2 shrink-0 sm:self-end">
+          <button onclick="openProofModal(${t.id})"
+            class="flex items-center gap-1 text-sm text-green-600 hover:text-green-700 border-2 border-green-200 hover:border-green-400 bg-green-50 hover:bg-green-100 px-3 py-2 rounded-lg transition-all font-medium">
+            <i data-lucide="camera" style="width:14px;height:14px;"></i> หลักฐาน${t.proofImages?.length ? ` (${t.proofImages.length})` : ''}
+          </button>
           ${t.status === 'done' ? `
           <button onclick="generateRepairReport(${t.id})"
             class="flex items-center gap-1 text-sm text-amber-600 hover:text-amber-700 border-2 border-amber-200 hover:border-amber-400 bg-amber-50 hover:bg-amber-100 px-3 py-2 rounded-lg transition-all font-medium">
@@ -1875,6 +1978,162 @@ async function confirmSelfClose() {
   showToast('ปิดคำขอซ่อมเรียบร้อย #' + String(t.id).slice(-5), 'success');
 }
 
+// ==================== Generic Image Picker (reuse for edit & proof) ====================
+// state ต่อ key: kept = URL เดิมที่เก็บไว้, files/previews = รูปใหม่ที่เพิ่ง add
+const imgPickers = {};
+function pickerInit(key, existingUrls) {
+  imgPickers[key] = { kept: [...(existingUrls || [])], files: [], previews: [] };
+}
+function pickerCount(key) {
+  const p = imgPickers[key]; return p ? p.kept.length + p.files.length : 0;
+}
+function pickerAdd(key, input) {
+  const p = imgPickers[key]; if (!p) return;
+  const newFiles = Array.from(input.files); input.value = '';
+  const remaining = 5 - pickerCount(key);
+  if (remaining <= 0) { showToast('เพิ่มรูปได้สูงสุด 5 รูป', 'error'); return; }
+  if (newFiles.length > remaining) showToast('เพิ่มได้อีกแค่ ' + remaining + ' รูป', 'error');
+  newFiles.slice(0, remaining).forEach(file => {
+    if (file.size > 5 * 1024 * 1024) { showToast('รูปใหญ่เกิน 5 MB: ' + file.name, 'error'); return; }
+    const reader = new FileReader();
+    reader.onload = e => { p.files.push(file); p.previews.push(e.target.result); renderPicker(key); };
+    reader.readAsDataURL(file);
+  });
+}
+function pickerRemoveKept(key, i) { imgPickers[key]?.kept.splice(i, 1); renderPicker(key); }
+function pickerRemoveNew(key, i) { const p = imgPickers[key]; if (!p) return; p.files.splice(i, 1); p.previews.splice(i, 1); renderPicker(key); }
+function renderPicker(key) {
+  const p = imgPickers[key]; const grid = document.getElementById('picker-' + key); if (!grid) return;
+  const keptHtml = p.kept.map((url, i) => `
+    <div class="relative">
+      <img src="${escHtml(url)}" class="img-thumb cursor-pointer" onclick="openImgModal('${escHtml(url)}')" onerror="this.style.display='none'">
+      <button type="button" onclick="pickerRemoveKept('${key}',${i})" class="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white rounded-full leading-none flex items-center justify-center" style="width:18px;height:18px;font-size:11px;transform:translate(35%,-35%);">✕</button>
+    </div>`).join('');
+  const newHtml = p.previews.map((url, i) => `
+    <div class="relative">
+      <img src="${escHtml(url)}" class="img-thumb cursor-pointer" onclick="openImgModal('${escHtml(url)}')">
+      <span class="absolute bottom-0 left-0 bg-green-500 text-white text-[9px] px-1 rounded-tr">ใหม่</span>
+      <button type="button" onclick="pickerRemoveNew('${key}',${i})" class="absolute top-0 right-0 bg-red-500 hover:bg-red-600 text-white rounded-full leading-none flex items-center justify-center" style="width:18px;height:18px;font-size:11px;transform:translate(35%,-35%);">✕</button>
+    </div>`).join('');
+  grid.innerHTML = keptHtml + newHtml;
+}
+// อัปโหลดรูปใหม่ขึ้น Drive แล้วคืน array URL รวม (เดิม + ใหม่)
+async function pickerUpload(key, btn) {
+  const p = imgPickers[key]; if (!p) return [];
+  if (!useSheets) return [...p.kept, ...p.previews];   // โหมด local: เก็บ base64 ตรงๆ
+  if (!p.files.length) return [...p.kept];
+  const urls = await uploadImages(p.files, btn);        // โหมด Sheets: อัปขึ้น Drive ได้ URL
+  return [...p.kept, ...urls];
+}
+
+// ==================== Edit Ticket Modal (User) ====================
+let _editId = null;
+function openEditModal(id) {
+  const t = tickets.find(t => t.id === id); if (!t) return;
+  _editId = id;
+  document.getElementById('edit-equip').value    = t.equip || '';
+  document.getElementById('edit-deviceId').value = t.deviceId || '';
+  document.getElementById('edit-category').value = t.category || 'other';
+  document.getElementById('edit-desc').value     = t.desc || '';
+  document.getElementById('edit-error').classList.add('hidden');
+  pickerInit('edit', t.images);
+  renderPicker('edit');
+  const m = document.getElementById('edit-modal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+  lucideIn(m);
+}
+function cancelEdit() {
+  const m = document.getElementById('edit-modal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+  _editId = null;
+}
+async function confirmEdit() {
+  const t = tickets.find(t => t.id === _editId); if (!t) { cancelEdit(); return; }
+  const equip = document.getElementById('edit-equip').value.trim();
+  const desc  = document.getElementById('edit-desc').value.trim();
+  if (!equip) { const e=document.getElementById('edit-error'); e.textContent='กรุณากรอกชื่ออุปกรณ์'; e.classList.remove('hidden'); return; }
+  const deviceId = document.getElementById('edit-deviceId').value.trim();
+  const category = document.getElementById('edit-category').value;
+  const btn = document.getElementById('edit-save-btn');
+  btn.disabled = true;
+  const oldLabel = btn.textContent;
+  btn.textContent = 'กำลังบันทึก...';
+
+  const images = await pickerUpload('edit', btn);
+  // อัปเดต local ก่อน (optimistic)
+  Object.assign(t, { equip, deviceId, category, desc, images, updatedAt: new Date().toISOString() });
+
+  if (useSheets) {
+    const updates = [
+      { field: 'equip',    value: equip },
+      { field: 'deviceId', value: deviceId },
+      { field: 'category', value: category },
+      { field: 'desc',     value: desc },
+      { field: 'images',   value: JSON.stringify(images) },
+    ];
+    try {
+      for (const u of updates) {
+        const res = await apiPost({ action: 'update', id: _editId, field: u.field, value: u.value });
+        if (res && res.ok === false) throw new Error(res.error || 'update failed');
+      }
+    } catch(err) {
+      btn.disabled = false; btn.textContent = oldLabel;
+      showToast('บันทึกไม่สำเร็จ: ' + (err.message || ''), 'error');
+      return;
+    }
+  } else {
+    try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {}
+  }
+
+  btn.disabled = false; btn.textContent = oldLabel;
+  cancelEdit();
+  updateStats(); renderUserTickets(); renderAdminTickets();
+  showToast('แก้ไขคำขอเรียบร้อย #' + String(t.id).slice(-5), 'success');
+}
+
+// ==================== Proof-of-Completion Images Modal (Admin) ====================
+let _proofId = null;
+function openProofModal(id) {
+  const t = tickets.find(t => t.id === id); if (!t) return;
+  _proofId = id;
+  pickerInit('proof', t.proofImages);
+  renderPicker('proof');
+  const m = document.getElementById('proof-modal');
+  m.classList.remove('hidden'); m.classList.add('flex');
+  lucideIn(m);
+}
+function cancelProof() {
+  const m = document.getElementById('proof-modal');
+  m.classList.add('hidden'); m.classList.remove('flex');
+  _proofId = null;
+}
+async function confirmProof() {
+  const t = tickets.find(t => t.id === _proofId); if (!t) { cancelProof(); return; }
+  const btn = document.getElementById('proof-save-btn');
+  btn.disabled = true; const oldLabel = btn.textContent; btn.textContent = 'กำลังบันทึก...';
+
+  const proofImages = await pickerUpload('proof', btn);
+  t.proofImages = proofImages; t.updatedAt = new Date().toISOString();
+
+  if (useSheets) {
+    try {
+      const res = await apiPost({ action: 'update', id: _proofId, field: 'proofImages', value: JSON.stringify(proofImages) });
+      if (res && res.ok === false) throw new Error(res.error || 'update failed');
+    } catch(err) {
+      btn.disabled = false; btn.textContent = oldLabel;
+      showToast('บันทึกไม่สำเร็จ: ' + (err.message || ''), 'error');
+      return;
+    }
+  } else {
+    try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {}
+  }
+
+  btn.disabled = false; btn.textContent = oldLabel;
+  cancelProof();
+  renderAdminTickets();
+  showToast('บันทึกรูปหลักฐานเรียบร้อย', 'success');
+}
+
 // ==================== Helpers ====================
 // แปลง data-lucide เฉพาะภายใน container (scope) แทนการสแกนทั้งหน้าด้วย lucide.createIcons()
 function lucideIn(root){
@@ -1893,6 +2152,8 @@ function lucideIn(root){
   });
 }
 function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+// parse ค่า images/proofImages เป็น array อย่างปลอดภัย (รองรับทั้ง undefined และ JSON string)
+function safeParseArr(v){ try { const a = JSON.parse(String(v || '[]')); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
 function urgencyLabel(v){ return {low:'🟢 ต่ำ (7-30วัน)',medium:'🟡 ปานกลาง (2-7วัน)',high:'🔴 ด่วนมาก (1-2วัน)'}[v]||v; }
 
 // overdue: ยังไม่เสร็จ + เกินเวลาตามระดับความเร่งด่วน

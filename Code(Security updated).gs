@@ -11,7 +11,9 @@ const SYSTEM_NAME        = 'ระบบแจ้งซ่อมบำรุง'
 const SYSTEM_URL         = 'https://pharmaciststack.github.io/SALA-Repair-Request-Ticket/';
 const GOOGLE_CLIENT_ID   = '854838901494-cuhmkrl29oj80i12apt7no01k763r3o2.apps.googleusercontent.com';
 const SUPER_ADMIN_EMAILS = ['pharmacist@salaosot.com', 'goodyearzph@gmail.com'];
-const ALLOWED_UPDATE_FIELDS = ['status', 'note'];
+const ALLOWED_UPDATE_FIELDS = ['status', 'note', 'equip', 'deviceId', 'category', 'urgency', 'desc', 'images', 'proofImages'];
+// ฟิลด์ที่ "เจ้าของ ticket" (ผู้ใช้ทั่วไป) แก้เองได้บน ticket ของตัวเอง
+const USER_EDITABLE_FIELDS = ['equip', 'deviceId', 'category', 'urgency', 'desc', 'images'];
 
 // ── Auth helpers ──────────────────────────────────────
 // Decodes a Google ID token locally (no external network call).
@@ -112,7 +114,8 @@ function doPost(e) {
   }
 
   // Destructive / management actions are admin-only
-  const adminOnly = ['update', 'delete', 'clear', 'addAdmin', 'removeAdmin', 'addTech', 'removeTech'];
+  // 'update' ไม่อยู่ตรงนี้แล้ว — ตรวจสิทธิ์ราย ticket ภายใน handler (ผู้ใช้แก้ของตัวเองได้)
+  const adminOnly = ['delete', 'clear', 'addAdmin', 'removeAdmin', 'addTech', 'removeTech'];
   if (adminOnly.includes(body.action) && !isAdminEmail(callerEmail)) {
     return json({ ok: false, error: 'Forbidden' });
   }
@@ -125,7 +128,8 @@ function doPost(e) {
       t.id, t.name, t.email, t.branch, t.phone,
       t.equip, t.deviceId || '', t.category, t.desc, t.urgency,
       t.status, t.note, t.createdAt, t.updatedAt,
-      JSON.stringify(t.images || [])
+      JSON.stringify(t.images || []),
+      JSON.stringify(t.proofImages || [])
     ]);
     try { sendNewTicketNotification(t); } catch(err) {}
 
@@ -141,9 +145,16 @@ function doPost(e) {
     const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const col = (name) => headers.indexOf(name) + 1;
     const rows = sheet.getDataRange().getValues();
+    const callerIsAdmin = isAdminEmail(callerEmail);
     let ticketRow = null;
     for (let i = 1; i < rows.length; i++) {
       if (String(rows[i][0]) === String(body.id)) {
+        // ผู้ใช้ทั่วไป: แก้ได้เฉพาะ ticket ของตัวเอง และเฉพาะฟิลด์ที่อนุญาต
+        if (!callerIsAdmin) {
+          const owner = String(rows[i][col('email') - 1] || '').toLowerCase();
+          if (owner !== callerEmail) return json({ ok: false, error: 'Forbidden' });
+          if (!USER_EDITABLE_FIELDS.includes(body.field)) return json({ ok: false, error: 'Forbidden field' });
+        }
         const c = col(body.field);
         if (c > 0) sheet.getRange(i + 1, c).setValue(body.value);
         const cu = col('updatedAt');
@@ -398,7 +409,7 @@ function getSheet() {
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(['id','name','email','branch','phone','equip','deviceId','category','desc','urgency','status','note','createdAt','updatedAt','images']);
+    sheet.appendRow(['id','name','email','branch','phone','equip','deviceId','category','desc','urgency','status','note','createdAt','updatedAt','images','proofImages']);
     sheet.setFrozenRows(1);
   }
   return sheet;
