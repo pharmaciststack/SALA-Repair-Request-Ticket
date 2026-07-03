@@ -782,6 +782,7 @@
       </div>
       <div class="bg-white rounded-xl p-4 shadow border-2 border-gray-100">
         <p class="text-xs text-gray-500">⏳ ยังไม่เสร็จ</p><p id="rep-pending" class="text-3xl font-bold text-gray-600">0</p>
+        <p class="text-xs text-red-500 font-medium">🚨 เกินกำหนดแล้ว <span id="rep-overdue">0</span></p>
       </div>
       <div class="bg-white rounded-xl p-4 shadow border-2 border-indigo-100">
         <p class="text-xs text-gray-500">Σ รวมทั้งหมด</p><p id="rep-total" class="text-3xl font-bold text-indigo-600">0</p>
@@ -2300,26 +2301,31 @@ function getReportTickets() {
 // จัดกลุ่ม ticket ตาม groupBy ('' = ไม่แยก) → { key: {onTime,late,pending} } ใช้ร่วมกันทั้งหน้าเว็บและ CSV
 function computeReportGroups(list, groupBy) {
   const groups = {};
-  const addTo = (key, o) => { (groups[key] = groups[key] || {onTime:0,late:0,pending:0})[o]++; };
+  // overdue = ยังไม่เสร็จ + เลยเส้นตายแล้ว (subset ของ pending)
+  const bump = (key, t) => {
+    const g = groups[key] = groups[key] || {onTime:0,late:0,pending:0,overdue:0};
+    g[ticketOutcome(t)]++;
+    if (isOverdue(t)) g.overdue++;
+  };
   list.forEach(t => {
-    const o = ticketOutcome(t);
     if (groupBy === 'zone') {
       const zs = zonesOfBranch(t.branch);
-      if (!zs.length) addTo('(ไม่ระบุโซน)', o); else zs.forEach(z => addTo(z, o));
-    } else if (groupBy === 'branch') addTo(t.branch || '-', o);
-    else if (groupBy === 'category') addTo(categoryLabel(t.category), o);
-    else if (groupBy === 'urgency') addTo(urgencyLabel(t.urgency), o);
-    else addTo('รวมทั้งหมด', o);
+      if (!zs.length) bump('(ไม่ระบุโซน)', t); else zs.forEach(z => bump(z, t));
+    } else if (groupBy === 'branch') bump(t.branch || '-', t);
+    else if (groupBy === 'category') bump(categoryLabel(t.category), t);
+    else if (groupBy === 'urgency') bump(urgencyLabel(t.urgency), t);
+    else bump('รวมทั้งหมด', t);
   });
   return groups;
 }
 function renderReport() {
   const list = getReportTickets();
-  let onTime=0, late=0, pending=0;
-  list.forEach(t => { const o=ticketOutcome(t); if(o==='onTime')onTime++; else if(o==='late')late++; else pending++; });
+  let onTime=0, late=0, pending=0, overdue=0;
+  list.forEach(t => { const o=ticketOutcome(t); if(o==='onTime')onTime++; else if(o==='late')late++; else pending++; if(isOverdue(t))overdue++; });
   document.getElementById('rep-ontime').textContent = onTime;
   document.getElementById('rep-late').textContent = late;
   document.getElementById('rep-pending').textContent = pending;
+  document.getElementById('rep-overdue').textContent = overdue;
   document.getElementById('rep-total').textContent = list.length;
 
   // detail table (แสดงเสมอ — ดูรายงานบนเว็บได้เลยไม่ต้อง export)
@@ -2338,6 +2344,7 @@ function renderReport() {
       <td class="px-4 py-2 text-sm text-center text-green-600 font-semibold">${g.onTime}</td>
       <td class="px-4 py-2 text-sm text-center text-orange-500 font-semibold">${g.late}</td>
       <td class="px-4 py-2 text-sm text-center text-gray-600 font-semibold">${g.pending}</td>
+      <td class="px-4 py-2 text-sm text-center text-red-600 font-semibold">${g.overdue || ''}</td>
       <td class="px-4 py-2 text-sm text-center font-bold text-indigo-600">${tot}</td>
     </tr>`;
   }).join('');
@@ -2352,9 +2359,10 @@ function renderReport() {
           <th class="px-4 py-2 text-center font-semibold">✅ ตรงเวลา</th>
           <th class="px-4 py-2 text-center font-semibold">⏰ เกินเวลา</th>
           <th class="px-4 py-2 text-center font-semibold">⏳ ยังไม่เสร็จ</th>
+          <th class="px-4 py-2 text-center font-semibold">🚨 เกินกำหนด</th>
           <th class="px-4 py-2 text-center font-semibold">รวม</th>
         </tr></thead>
-        <tbody>${rows || '<tr><td colspan="5" class="px-4 py-6 text-center text-gray-400 text-sm">ไม่มีข้อมูล</td></tr>'}</tbody>
+        <tbody>${rows || '<tr><td colspan="6" class="px-4 py-6 text-center text-gray-400 text-sm">ไม่มีข้อมูล</td></tr>'}</tbody>
       </table>
     </div>${note}`;
 }
@@ -2417,10 +2425,10 @@ function exportReportCSV() {
   const groupBy = document.getElementById('report-groupby').value;
   const groups = computeReportGroups(list, groupBy);
   const groupLabel = { zone:'โซน', branch:'สาขา', category:'หมวดหมู่', urgency:'ความเร่งด่วน', '':'กลุ่ม' }[groupBy];
-  const summaryHeader = [groupLabel, 'ตรงเวลา', 'เกินเวลา', 'ยังไม่เสร็จ', 'รวม'].map(esc).join(',');
+  const summaryHeader = [groupLabel, 'เสร็จตรงเวลา', 'เสร็จเกินเวลา', 'ยังไม่เสร็จ', 'เกินกำหนด(ยังไม่เสร็จ)', 'รวม'].map(esc).join(',');
   const summaryRows = Object.keys(groups).sort().map(k => {
     const g = groups[k]; const tot = g.onTime + g.late + g.pending;
-    return [k, g.onTime, g.late, g.pending, tot].map(esc).join(',');
+    return [k, g.onTime, g.late, g.pending, g.overdue, tot].map(esc).join(',');
   });
   const csv = '﻿' + [
     header.map(esc).join(','), ...lines,
