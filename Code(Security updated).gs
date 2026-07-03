@@ -13,7 +13,8 @@ const GOOGLE_CLIENT_ID   = '854838901494-cuhmkrl29oj80i12apt7no01k763r3o2.apps.g
 const SUPER_ADMIN_EMAILS = ['pharmacist@salaosot.com', 'goodyearzph@gmail.com'];
 const ALLOWED_UPDATE_FIELDS = ['status', 'note', 'equip', 'deviceId', 'category', 'urgency', 'desc', 'images', 'proofImages'];
 // ฟิลด์ที่ "เจ้าของ ticket" (ผู้ใช้ทั่วไป) แก้เองได้บน ticket ของตัวเอง
-const USER_EDITABLE_FIELDS = ['equip', 'deviceId', 'category', 'urgency', 'desc', 'images'];
+// status/note รวมด้วยเพื่อให้ปุ่ม "ปิดคำขอเอง" ของ user ทำงานได้
+const USER_EDITABLE_FIELDS = ['equip', 'deviceId', 'category', 'urgency', 'desc', 'images', 'status', 'note'];
 
 // ── Auth helpers ──────────────────────────────────────
 // Decodes a Google ID token locally (no external network call).
@@ -84,6 +85,15 @@ function doGet(e) {
     return json({ ok: true, users });
   }
 
+  if (action === 'getLogs') {
+    // เฉพาะ super admin เท่านั้น (audit log)
+    if (!SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(callerEmail)) return json({ ok: false, error: 'Forbidden' });
+    const rows = getLogSheet().getDataRange().getValues().slice(1);
+    const logs = rows.map(r => ({ time: r[0], actor: r[1], action: r[2], ticketId: r[3], ticketLabel: r[4], detail: r[5] }));
+    logs.reverse(); // ใหม่สุดก่อน
+    return json({ ok: true, logs: logs.slice(0, 800) });
+  }
+
   // default — return tickets
   // Admins see all tickets; regular users see only their own
   const sheet = getSheet();
@@ -114,8 +124,8 @@ function doPost(e) {
   }
 
   // Destructive / management actions are admin-only
-  // 'update' ไม่อยู่ตรงนี้แล้ว — ตรวจสิทธิ์ราย ticket ภายใน handler (ผู้ใช้แก้ของตัวเองได้)
-  const adminOnly = ['delete', 'clear', 'addAdmin', 'removeAdmin', 'addTech', 'removeTech'];
+  // 'update' / 'resolveExtension' ไม่อยู่ตรงนี้ — ตรวจสิทธิ์ราย ticket ภายใน handler
+  const adminOnly = ['delete', 'clear', 'addAdmin', 'removeAdmin', 'addTech', 'removeTech', 'requestExtension'];
   if (adminOnly.includes(body.action) && !isAdminEmail(callerEmail)) {
     return json({ ok: false, error: 'Forbidden' });
   }
@@ -129,8 +139,11 @@ function doPost(e) {
       t.equip, t.deviceId || '', t.category, t.desc, t.urgency,
       t.status, t.note, t.createdAt, t.updatedAt,
       JSON.stringify(t.images || []),
-      JSON.stringify(t.proofImages || [])
+      JSON.stringify(t.proofImages || []),
+      '',  // completedAt — server เซ็ตตอนกดเสร็จ
+      ''   // extension — คำขอเลื่อน deadline (JSON)
     ]);
+    logAction(callerEmail, 'แจ้งซ่อมใหม่', t.id, [t.branch, t.equip].filter(Boolean).join(' · '), t.desc || '');
     try { sendNewTicketNotification(t); } catch(err) {}
 
   } else if (body.action === 'uploadImage') {
@@ -155,10 +168,30 @@ function doPost(e) {
           if (owner !== callerEmail) return json({ ok: false, error: 'Forbidden' });
           if (!USER_EDITABLE_FIELDS.includes(body.field)) return json({ ok: false, error: 'Forbidden field' });
         }
+        const oldStatus = rows[i][col('status') - 1];
         const c = col(body.field);
         if (c > 0) sheet.getRange(i + 1, c).setValue(body.value);
         const cu = col('updatedAt');
         if (cu > 0) sheet.getRange(i + 1, cu).setValue(new Date().toISOString());
+        // บันทึกเวลาปิดงานจริง เมื่อสถานะเปลี่ยนเป็น done (สำหรับรายงานตรงเวลา/เกินเวลา)
+        if (body.field === 'status' && body.value === 'done') {
+          const cc = col('completedAt');
+          if (cc > 0) sheet.getRange(i + 1, cc).setValue(new Date().toISOString());
+        }
+        // ── audit log ──
+        const label = ticketLabelFromRow(rows[i], headers);
+        if (body.field === 'status') {
+          let act = 'เปลี่ยนสถานะ';
+          if (body.value === 'done') act = 'ปิดงาน (ซ่อมเสร็จ)';
+          else if (oldStatus === 'done') act = 'เปิดงานใหม่';
+          logAction(callerEmail, act, body.id, label, statusThai(oldStatus) + ' → ' + statusThai(body.value));
+        } else if (body.field === 'note') {
+          logAction(callerEmail, 'แก้ไขหมายเหตุ', body.id, label, String(body.value || '').slice(0, 120));
+        } else if (body.field === 'proofImages') {
+          logAction(callerEmail, 'อัปเดตรูปหลักฐาน', body.id, label, '');
+        } else {
+          logAction(callerEmail, 'แก้ไขรายละเอียด', body.id, label, body.field);
+        }
         ticketRow = rows[i];
         break;
       }
@@ -174,14 +207,81 @@ function doPost(e) {
     }
 
   } else if (body.action === 'delete') {
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
     const rows = sheet.getDataRange().getValues();
     for (let i = 1; i < rows.length; i++) {
-      if (String(rows[i][0]) === String(body.id)) { sheet.deleteRow(i + 1); break; }
+      if (String(rows[i][0]) === String(body.id)) {
+        logAction(callerEmail, 'ลบรายการ', body.id, ticketLabelFromRow(rows[i], headers), '');
+        sheet.deleteRow(i + 1);
+        break;
+      }
     }
 
   } else if (body.action === 'clear') {
     const last = sheet.getLastRow();
     if (last > 1) sheet.deleteRows(2, last - 1);
+
+  // ── Deadline Extension ───────────────────────────
+  } else if (body.action === 'requestExtension') {
+    // ช่าง/แอดมิน ขอเลื่อน deadline (adminOnly เช็คแล้ว)
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const col = (name) => headers.indexOf(name) + 1;
+    const rows = sheet.getDataRange().getValues();
+    const days = Number(body.days) || 0;
+    if (days <= 0) return json({ ok: false, error: 'จำนวนวันไม่ถูกต้อง' });
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(body.id)) {
+        const ec = col('extension');
+        let prev = {}; try { prev = JSON.parse(rows[i][ec - 1] || '{}'); } catch(e) {}
+        const ext = {
+          status: 'pending',
+          reqDays: days,
+          reason: String(body.reason || ''),
+          reqBy: callerEmail,
+          reqAt: new Date().toISOString(),
+          approvedDays: Number(prev.approvedDays) || 0  // คงวันที่เคยอนุมัติไว้ (สะสม)
+        };
+        if (ec > 0) sheet.getRange(i + 1, ec).setValue(JSON.stringify(ext));
+        const cu = col('updatedAt');
+        if (cu > 0) sheet.getRange(i + 1, cu).setValue(new Date().toISOString());
+        logAction(callerEmail, 'ขอเลื่อน deadline', body.id, ticketLabelFromRow(rows[i], headers), '+' + days + ' วัน: ' + String(body.reason || ''));
+        return json({ ok: true, extension: ext });
+      }
+    }
+    return json({ ok: false, error: 'ไม่พบรายการ' });
+
+  } else if (body.action === 'resolveExtension') {
+    // อนุมัติ/ปฏิเสธ — เฉพาะ super admin หรือเจ้าของ ticket
+    const headers = sheet.getRange(1, 1, 1, sheet.getLastColumn()).getValues()[0];
+    const col = (name) => headers.indexOf(name) + 1;
+    const rows = sheet.getDataRange().getValues();
+    const isSuper = SUPER_ADMIN_EMAILS.map(e => e.toLowerCase()).includes(callerEmail);
+    for (let i = 1; i < rows.length; i++) {
+      if (String(rows[i][0]) === String(body.id)) {
+        const owner = String(rows[i][col('email') - 1] || '').toLowerCase();
+        if (!isSuper && owner !== callerEmail) return json({ ok: false, error: 'Forbidden' });
+        const ec = col('extension');
+        let ext = {}; try { ext = JSON.parse(rows[i][ec - 1] || '{}'); } catch(e) {}
+        if (ext.status !== 'pending') return json({ ok: false, error: 'ไม่มีคำขอที่รออนุมัติ' });
+        if (body.decision === 'approve') {
+          ext.approvedDays = (Number(ext.approvedDays) || 0) + (Number(ext.reqDays) || 0); // สะสม
+          ext.status = 'approved';
+          ext.approvedBy = callerEmail;
+          ext.approvedAt = new Date().toISOString();
+        } else {
+          ext.status = 'rejected';
+          ext.approvedBy = callerEmail;
+          ext.approvedAt = new Date().toISOString();
+        }
+        if (ec > 0) sheet.getRange(i + 1, ec).setValue(JSON.stringify(ext));
+        const cu = col('updatedAt');
+        if (cu > 0) sheet.getRange(i + 1, cu).setValue(new Date().toISOString());
+        const actExt = body.decision === 'approve' ? 'อนุมัติเลื่อน deadline' : 'ปฏิเสธคำขอเลื่อน';
+        logAction(callerEmail, actExt, body.id, ticketLabelFromRow(rows[i], headers), body.decision === 'approve' ? ('+' + (Number(ext.reqDays) || 0) + ' วัน') : '');
+        return json({ ok: true, extension: ext });
+      }
+    }
+    return json({ ok: false, error: 'ไม่พบรายการ' });
 
   // ── User Registration & Role Management ──────────
   } else if (body.action === 'registerUser') {
@@ -409,7 +509,7 @@ function getSheet() {
   let sheet = ss.getSheetByName(SHEET_NAME);
   if (!sheet) {
     sheet = ss.insertSheet(SHEET_NAME);
-    sheet.appendRow(['id','name','email','branch','phone','equip','deviceId','category','desc','urgency','status','note','createdAt','updatedAt','images','proofImages']);
+    sheet.appendRow(['id','name','email','branch','phone','equip','deviceId','category','desc','urgency','status','note','createdAt','updatedAt','images','proofImages','completedAt','extension']);
     sheet.setFrozenRows(1);
   }
   return sheet;
@@ -438,6 +538,34 @@ function getUsersSheet() {
     sheet.setFrozenRows(1);
   }
   return sheet;
+}
+
+function getLogSheet() {
+  const ss = SpreadsheetApp.getActiveSpreadsheet();
+  let sheet = ss.getSheetByName('Logs');
+  if (!sheet) {
+    sheet = ss.insertSheet('Logs');
+    sheet.appendRow(['time', 'actor', 'action', 'ticketId', 'ticketLabel', 'detail']);
+    sheet.setFrozenRows(1);
+  }
+  return sheet;
+}
+
+// บันทึก audit log — ห่อ try/catch ไม่ให้ล้มเหลวไปกระทบ action หลัก
+function logAction(actor, action, ticketId, ticketLabel, detail) {
+  try {
+    getLogSheet().appendRow([new Date().toISOString(), actor || '', action || '', ticketId || '', ticketLabel || '', detail || '']);
+  } catch (err) {}
+}
+
+// ดึง label ของ ticket (สาขา · อุปกรณ์) จาก row + headers สำหรับใส่ใน log
+function ticketLabelFromRow(row, headers) {
+  const branch = row[headers.indexOf('branch')] || '';
+  const equip  = row[headers.indexOf('equip')] || '';
+  return [branch, equip].filter(Boolean).join(' · ');
+}
+function statusThai(v) {
+  return { waiting: 'รอดำเนินการ', progress: 'กำลังดำเนินการ', done: 'เสร็จสิ้น' }[v] || v;
 }
 
 function json(data) {
