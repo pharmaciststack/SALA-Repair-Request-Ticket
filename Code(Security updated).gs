@@ -49,7 +49,13 @@ function doGet(e) {
 
   // No-auth version check — open this URL in browser to confirm deployment
   if (action === 'ping') {
-    return json({ ok: true, version: '4.0', time: new Date().toISOString() });
+    return json({
+      ok: true,
+      version: '5.0',                       // ← เวอร์ชันใหม่: ถ้าเห็น 5.0 = deploy โค้ดใหม่สำเร็จ
+      allowedFields: ALLOWED_UPDATE_FIELDS,  // ต้องมี proofImages / completedAt-ready
+      features: ['proofImages', 'extension', 'logs', 'completedAt'],
+      time: new Date().toISOString()
+    });
   }
 
   let callerEmail;
