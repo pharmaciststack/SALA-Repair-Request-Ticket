@@ -2565,7 +2565,7 @@ function exportReportCSV() {
   const compRows = [
     '', 'ค่าตอบแทนทีม',
     ['จำนวนงานทั้งหมด', cn].map(esc).join(','),
-    ['เรตที่ได้ (บ./งาน)', cRate].map(esc).join(','),
+    ['อัตราผลตอบแทนที่ได้ (บ./งาน)', cRate].map(esc).join(','),
     ['เหตุผล', cReason].map(esc).join(','),
     ['ค่าตอบแทนรวม (บาท)', cn * cRate].map(esc).join(','),
   ];
