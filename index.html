@@ -731,6 +731,7 @@
         <div>
           <label class="block text-xs font-semibold text-gray-600 mb-1">อ้างอิงวันที่</label>
           <select id="report-basis" onchange="renderReport()" class="border-2 border-gray-200 rounded-lg px-3 py-2 text-sm bg-white">
+            <option value="due">📌 วันครบกำหนด</option>
             <option value="created">📅 วันที่แจ้ง</option>
             <option value="completed">✅ วันที่ปิดงาน</option>
           </select>
@@ -768,6 +769,45 @@
             <option value="zone">โซน</option><option value="branch">สาขา</option>
             <option value="category">หมวดหมู่</option><option value="urgency">ความเร่งด่วน</option>
           </select>
+        </div>
+      </div>
+    </div>
+
+    <!-- Compensation panel -->
+    <div class="bg-gradient-to-br from-emerald-50 to-teal-50 rounded-xl shadow border-2 border-emerald-200 p-4 mb-4">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-3">
+        <h3 class="text-base font-bold text-gray-800 flex items-center gap-2">
+          <i data-lucide="wallet" style="width:18px;height:18px;color:#059669;"></i> ค่าตอบแทนทีม (ตามช่วงที่เลือก)
+        </h3>
+        <span class="text-xs text-gray-500">ประเมินสถานะ ณ <span id="comp-cutoff" class="font-semibold text-gray-700">-</span></span>
+      </div>
+      <div class="grid md:grid-cols-2 gap-4">
+        <!-- rate inputs -->
+        <div class="bg-white/70 rounded-lg p-3 border border-emerald-100">
+          <p class="text-xs font-semibold text-gray-600 mb-2">เรตต่องาน (บาท) — แก้ได้</p>
+          <div class="space-y-1.5 text-sm">
+            <label class="flex items-center justify-between gap-2">
+              <span class="text-gray-600">✅ ปิดครบ + ทันเวลาหมด</span>
+              <input id="comp-rate-full" type="number" min="0" value="100" onchange="renderCompensation()" class="w-20 border-2 border-gray-200 rounded-lg px-2 py-1 text-sm text-right">
+            </label>
+            <label class="flex items-center justify-between gap-2">
+              <span class="text-gray-600">⏰ ปิดครบ แต่มีไม่ทัน</span>
+              <input id="comp-rate-late" type="number" min="0" value="75" onchange="renderCompensation()" class="w-20 border-2 border-gray-200 rounded-lg px-2 py-1 text-sm text-right">
+            </label>
+            <label class="flex items-center justify-between gap-2">
+              <span class="text-gray-600">🚫 มีงานปิดไม่ครบ</span>
+              <input id="comp-rate-fail" type="number" min="0" value="50" onchange="renderCompensation()" class="w-20 border-2 border-gray-200 rounded-lg px-2 py-1 text-sm text-right">
+            </label>
+          </div>
+        </div>
+        <!-- result -->
+        <div class="bg-white rounded-lg p-3 border border-emerald-100 flex flex-col justify-center">
+          <div id="comp-result">
+            <p class="text-xs text-gray-500">จำนวนงานทั้งหมด <span id="comp-jobs" class="font-bold text-gray-800">0</span> งาน</p>
+            <p class="text-xs text-gray-500 mt-0.5" id="comp-breakdown">-</p>
+            <p class="text-sm mt-2">เรตที่ได้: <span id="comp-rate" class="font-bold text-emerald-700">-</span> บ./งาน <span id="comp-reason" class="text-xs text-gray-400"></span></p>
+            <p class="text-2xl font-extrabold text-emerald-700 mt-1">💰 <span id="comp-total">0</span> บาท</p>
+          </div>
         </div>
       </div>
     </div>
@@ -937,7 +977,7 @@
   <footer class="mt-auto border-t border-gray-200 bg-white py-4 px-4">
     <div class="max-w-7xl mx-auto text-center space-y-1">
       <p class="text-xs text-gray-500 font-medium">© 2026 Salaosot. All rights reserved.</p>
-      <p class="text-xs text-gray-400">ระบบแจ้งซ่อมบำรุง (Sala-Repair) <span class="font-semibold text-amber-500">Ver 1.6.0</span></p>
+      <p class="text-xs text-gray-400">ระบบแจ้งซ่อมบำรุง (Sala-Repair) <span class="font-semibold text-amber-500">Ver 1.7.0</span></p>
       <p class="text-xs text-gray-400">หากพบปัญหาการใช้งานติดต่อ: ฝ่าย IT / ภก.ปาล์ม</p>
     </div>
   </footer>
@@ -2245,6 +2285,34 @@ function ticketOutcome(t) {
   if (t.status !== 'done') return 'pending';
   return completionMs(t) <= deadlineMs(t) ? 'onTime' : 'late';
 }
+
+// ===== ประเมินสถานะ ณ "วันสิ้นสุดช่วงรายงาน" (cutoff) — ใช้เฉพาะในรายงาน =====
+// วันสิ้นสุดช่วง = report-to (สิ้นวัน) หรือถ้าไม่ระบุใช้ปัจจุบัน
+function reportCutoffMs() {
+  const to = document.getElementById('report-to')?.value;
+  return to ? new Date(to).setHours(23,59,59,999) : Date.now();
+}
+// ปิดงานไปแล้ว ณ เวลา cutoff ไหม
+function doneByCutoff(t, cutoff) {
+  if (t.completedAt) return new Date(t.completedAt).getTime() <= cutoff;
+  if (t.status === 'done') return t.updatedAt ? new Date(t.updatedAt).getTime() <= cutoff : true; // งานเก่าไม่มี completedAt
+  return false;
+}
+// ผลลัพธ์ ณ cutoff: 'onTime' | 'late' | 'pending'
+function outcomeAt(t, cutoff) {
+  if (doneByCutoff(t, cutoff)) {
+    const c = t.completedAt ? new Date(t.completedAt).getTime() : new Date(t.updatedAt).getTime();
+    return c <= deadlineMs(t) ? 'onTime' : 'late';
+  }
+  return 'pending';
+}
+// เกินกำหนด ณ cutoff (ยังไม่ปิด + เลยเส้นตายแล้ว ณ วันนั้น)
+function isOverdueAt(t, cutoff) {
+  if (doneByCutoff(t, cutoff)) return false;
+  const dl = deadlineMs(t);
+  return isFinite(dl) && cutoff > dl;
+}
+
 function initReport() {
   // populate zone/branch dropdowns (ครั้งเดียว)
   const zoneSel = document.getElementById('report-zone');
@@ -2279,18 +2347,20 @@ function getReportTickets() {
   const fCat = document.getElementById('report-category').value;
   const fUrg = document.getElementById('report-urgency').value;
   return tickets.filter(t => {
-    // basis date
+    // basis date — ใช้วันไหนตัดสินว่า ticket อยู่ในช่วงเวลาที่เลือก
+    let ms;
     if (basis === 'completed') {
       if (t.status !== 'done') return false;
-      const ms = completionMs(t);
+      ms = completionMs(t);
       if (!ms) return false;
-      if (fromMs && ms < fromMs) return false;
-      if (toMs && ms > toMs) return false;
+    } else if (basis === 'due') {
+      ms = deadlineMs(t);                 // วันครบกำหนด (แจ้ง + SLA + เลื่อน)
+      if (!isFinite(ms)) return false;
     } else {
-      const ms = t.createdAt ? new Date(t.createdAt).getTime() : 0;
-      if (fromMs && ms < fromMs) return false;
-      if (toMs && ms > toMs) return false;
+      ms = t.createdAt ? new Date(t.createdAt).getTime() : 0;
     }
+    if (fromMs && ms < fromMs) return false;
+    if (toMs && ms > toMs) return false;
     if (fZone && !zonesOfBranch(t.branch).includes(fZone)) return false;
     if (fBranch && t.branch !== fBranch) return false;
     if (fCat && t.category !== fCat) return false;
@@ -2301,11 +2371,12 @@ function getReportTickets() {
 // จัดกลุ่ม ticket ตาม groupBy ('' = ไม่แยก) → { key: {onTime,late,pending} } ใช้ร่วมกันทั้งหน้าเว็บและ CSV
 function computeReportGroups(list, groupBy) {
   const groups = {};
-  // overdue = ยังไม่เสร็จ + เลยเส้นตายแล้ว (subset ของ pending)
+  const cut = reportCutoffMs();
+  // overdue = ยังไม่เสร็จ + เลยเส้นตายแล้ว (subset ของ pending) — ประเมิน ณ วันสิ้นสุดช่วง
   const bump = (key, t) => {
     const g = groups[key] = groups[key] || {onTime:0,late:0,pending:0,overdue:0};
-    g[ticketOutcome(t)]++;
-    if (isOverdue(t)) g.overdue++;
+    g[outcomeAt(t, cut)]++;
+    if (isOverdueAt(t, cut)) g.overdue++;
   };
   list.forEach(t => {
     if (groupBy === 'zone') {
@@ -2320,13 +2391,17 @@ function computeReportGroups(list, groupBy) {
 }
 function renderReport() {
   const list = getReportTickets();
+  const cut = reportCutoffMs();
   let onTime=0, late=0, pending=0, overdue=0;
-  list.forEach(t => { const o=ticketOutcome(t); if(o==='onTime')onTime++; else if(o==='late')late++; else pending++; if(isOverdue(t))overdue++; });
+  list.forEach(t => { const o=outcomeAt(t, cut); if(o==='onTime')onTime++; else if(o==='late')late++; else pending++; if(isOverdueAt(t, cut))overdue++; });
   document.getElementById('rep-ontime').textContent = onTime;
   document.getElementById('rep-late').textContent = late;
   document.getElementById('rep-pending').textContent = pending;
   document.getElementById('rep-overdue').textContent = overdue;
   document.getElementById('rep-total').textContent = list.length;
+
+  // ค่าตอบแทน
+  renderCompensation(list, cut);
 
   // detail table (แสดงเสมอ — ดูรายงานบนเว็บได้เลยไม่ต้อง export)
   renderReportDetail(list);
@@ -2376,6 +2451,7 @@ function outcomeBadge(o) {
 function renderReportDetail(list) {
   document.getElementById('report-detail-count').textContent = list.length;
   const cont = document.getElementById('report-detail');
+  const cut = reportCutoffMs();
   // เรียงตามวันแจ้งใหม่สุดก่อน
   const sorted = [...list].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
   const rows = sorted.map(t => {
@@ -2389,7 +2465,7 @@ function renderReportDetail(list) {
       <td class="px-3 py-2 text-xs whitespace-nowrap"><span class="px-2 py-0.5 rounded-full font-medium urgency-${t.urgency}">${urgencyLabel(t.urgency)}</span></td>
       <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">${edlStr}${ext ? ` <span class="text-blue-600 font-medium">(+${ext})</span>` : ''}</td>
       <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">${t.completedAt ? formatDate(t.completedAt) : '-'}</td>
-      <td class="px-3 py-2 whitespace-nowrap">${outcomeBadge(ticketOutcome(t))}</td>
+      <td class="px-3 py-2 whitespace-nowrap">${outcomeBadge(outcomeAt(t, cut))}</td>
     </tr>`;
   }).join('');
   cont.innerHTML = `
@@ -2408,8 +2484,54 @@ function renderReportDetail(list) {
       </table>
     </div>`;
 }
+// ===== ค่าตอบแทนทีม =====
+// โหลด/เซฟเรตจาก localStorage
+function getCompRates() {
+  let saved = {}; try { saved = JSON.parse(localStorage.getItem('comp_rates') || '{}'); } catch(e) {}
+  const full = document.getElementById('comp-rate-full');
+  const late = document.getElementById('comp-rate-late');
+  const fail = document.getElementById('comp-rate-fail');
+  // ถ้ามีค่าเซฟไว้และ input ยังเป็น default ให้ใช้ค่าที่เซฟ (ครั้งแรกที่โหลด)
+  if (saved.full != null && full && !full.dataset.init) { full.value = saved.full; }
+  if (saved.late != null && late && !late.dataset.init) { late.value = saved.late; }
+  if (saved.fail != null && fail && !fail.dataset.init) { fail.value = saved.fail; }
+  if (full) full.dataset.init = '1';
+  const r = { full: Number(full?.value) || 0, late: Number(late?.value) || 0, fail: Number(fail?.value) || 0 };
+  try { localStorage.setItem('comp_rates', JSON.stringify(r)); } catch(e) {}
+  return r;
+}
+function renderCompensation(list, cut) {
+  if (!list) { list = getReportTickets(); cut = reportCutoffMs(); }
+  const rates = getCompRates();
+  // ป้ายวันสิ้นสุดช่วง (แสดงเฉพาะวันที่ ไม่เอาเวลา)
+  const to = document.getElementById('report-to')?.value;
+  document.getElementById('comp-cutoff').textContent = to
+    ? new Date(to + 'T00:00:00').toLocaleDateString('th-TH', { year:'numeric', month:'short', day:'numeric' })
+    : 'ปัจจุบัน';
+
+  let onTime=0, late=0, pending=0;
+  list.forEach(t => { const o=outcomeAt(t, cut); if(o==='onTime')onTime++; else if(o==='late')late++; else pending++; });
+  const n = list.length;
+
+  document.getElementById('comp-jobs').textContent = n;
+  const pct = x => n ? Math.round(x/n*100) : 0;
+  document.getElementById('comp-breakdown').textContent =
+    `✅ ตรงเวลา ${onTime} (${pct(onTime)}%) · ⏰ ไม่ทัน ${late} (${pct(late)}%) · 🚫 ปิดไม่ครบ ${pending} (${pct(pending)}%)`;
+
+  let rate, reason;
+  if (n === 0) { rate = 0; reason = '(ไม่มีงานในช่วงนี้)'; }
+  else if (pending > 0) { rate = rates.fail; reason = `(มีงานปิดไม่ครบ ${pending} งาน)`; }
+  else if (late > 0)   { rate = rates.late; reason = `(ปิดครบ แต่ไม่ทัน ${late} งาน)`; }
+  else                 { rate = rates.full; reason = '(ปิดครบ + ทันเวลาทั้งหมด 🎉)'; }
+
+  document.getElementById('comp-rate').textContent = rate.toLocaleString();
+  document.getElementById('comp-reason').textContent = reason;
+  document.getElementById('comp-total').textContent = (n * rate).toLocaleString();
+}
+
 function exportReportCSV() {
   const list = getReportTickets();
+  const cut = reportCutoffMs();
   const outcomeLabel = { onTime:'เสร็จตรงเวลา', late:'เสร็จเกินเวลา', pending:'ยังไม่เสร็จ' };
   const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
   const header = ['id','วันที่แจ้ง','สาขา','โซน','หมวดหมู่','ความเร่งด่วน','สถานะ','วันที่ปิดงาน','เส้นตายเดิม','เลื่อน(วัน)','เส้นตายจริง','ผลลัพธ์'];
@@ -2419,7 +2541,7 @@ function exportReportCSV() {
     const comp = t.completedAt ? formatDate(t.completedAt) : '';
     return [t.id, formatDate(t.createdAt), t.branch, zonesOfBranch(t.branch).join(' / '),
       categoryLabel(t.category), urgencyLabel(t.urgency), statusLabel(t.status),
-      comp, bdlStr, extApprovedDays(t) || '', edlStr, outcomeLabel[ticketOutcome(t)]].map(esc).join(',');
+      comp, bdlStr, extApprovedDays(t) || '', edlStr, outcomeLabel[outcomeAt(t, cut)]].map(esc).join(',');
   });
   // ตารางสรุป (ตามกลุ่มที่เลือกไว้บนเว็บ ถ้าไม่เลือกจะสรุปรวมแถวเดียว)
   const groupBy = document.getElementById('report-groupby').value;
@@ -2430,10 +2552,28 @@ function exportReportCSV() {
     const g = groups[k]; const tot = g.onTime + g.late + g.pending;
     return [k, g.onTime, g.late, g.pending, g.overdue, tot].map(esc).join(',');
   });
+  // บล็อกค่าตอบแทน (ประเมิน ณ วันสิ้นสุดช่วง)
+  let cOn=0, cLate=0, cPend=0;
+  list.forEach(t => { const o=outcomeAt(t, cut); if(o==='onTime')cOn++; else if(o==='late')cLate++; else cPend++; });
+  const cn = list.length;
+  const rates = getCompRates();
+  let cRate, cReason;
+  if (cn === 0) { cRate=0; cReason='ไม่มีงาน'; }
+  else if (cPend > 0) { cRate=rates.fail; cReason='มีงานปิดไม่ครบ'; }
+  else if (cLate > 0) { cRate=rates.late; cReason='ปิดครบ แต่มีไม่ทัน'; }
+  else { cRate=rates.full; cReason='ปิดครบ + ทันเวลาทั้งหมด'; }
+  const compRows = [
+    '', 'ค่าตอบแทนทีม',
+    ['จำนวนงานทั้งหมด', cn].map(esc).join(','),
+    ['เรตที่ได้ (บ./งาน)', cRate].map(esc).join(','),
+    ['เหตุผล', cReason].map(esc).join(','),
+    ['ค่าตอบแทนรวม (บาท)', cn * cRate].map(esc).join(','),
+  ];
   const csv = '﻿' + [
     header.map(esc).join(','), ...lines,
     '', 'ตารางสรุปรายงาน',
-    summaryHeader, ...summaryRows
+    summaryHeader, ...summaryRows,
+    ...compRows
   ].join('\r\n');
   const from = document.getElementById('report-from').value || 'all';
   const to = document.getElementById('report-to').value || 'all';
