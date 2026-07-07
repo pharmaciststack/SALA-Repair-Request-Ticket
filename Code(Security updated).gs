@@ -399,7 +399,7 @@ function getTechEmails() {
 }
 
 function sendNewTicketNotification(t) {
-  const urgencyLabel = { low: '🟢 ต่ำ (7-30 วัน)', medium: '🟡 ปานกลาง (2-7 วัน)', high: '🔴 ด่วนมาก (1-2 วัน)' }[t.urgency] || t.urgency;
+  const urgencyLabel = { low: '🟢 ต่ำ (15-30 วัน)', medium: '🟡 ปานกลาง (8-14 วัน)', high: '🔴 ด่วนมาก (1-7 วัน)' }[t.urgency] || t.urgency;
   const categoryLabel = { electrical: '⚡ ไฟฟ้า', plumbing: '🚿 ประปา', ac: '❄️ แอร์', computer: '💻 IT', furniture: '🪑 เฟอร์นิเจอร์', other: '🔩 อื่นๆ' }[t.category] || t.category;
   const subject = `🔧 [แจ้งซ่อมใหม่] ${t.equip} — สาขา ${t.branch} (${urgencyLabel})`;
   const body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">

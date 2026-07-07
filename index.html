@@ -361,7 +361,7 @@
                     <div class="text-xl">🟢</div>
                     <div class="text-sm font-bold mt-1">ต่ำ</div>
                     <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">มีอุปกรณ์ทดแทนหรือใช้งานต่อได้</div>
-                    <div class="text-[10px] font-semibold text-green-600 mt-0.5">(ภายใน 7-30 วัน)</div>
+                    <div class="text-[10px] font-semibold text-green-600 mt-0.5">(ภายใน 15-30 วัน)</div>
                   </div>
                 </label>
                 <label class="flex-1 cursor-pointer">
@@ -370,7 +370,7 @@
                     <div class="text-xl">🟡</div>
                     <div class="text-sm font-bold mt-1">ปานกลาง</div>
                     <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">ไม่กระทบการปฏิบัติงานโดยตรง</div>
-                    <div class="text-[10px] font-semibold text-amber-600 mt-0.5">(ภายใน 2-7 วัน)</div>
+                    <div class="text-[10px] font-semibold text-amber-600 mt-0.5">(ภายใน 8-14 วัน)</div>
                   </div>
                 </label>
                 <label class="flex-1 cursor-pointer">
@@ -379,7 +379,7 @@
                     <div class="text-xl">🔴</div>
                     <div class="text-sm font-bold mt-1">ด่วนมาก</div>
                     <div class="text-[10px] text-gray-500 mt-1 leading-tight px-1">กระทบการปฏิบัติงานโดยตรง</div>
-                    <div class="text-[10px] font-semibold text-red-600 mt-0.5">(ภายใน 1-2 วัน)</div>
+                    <div class="text-[10px] font-semibold text-red-600 mt-0.5">(ภายใน 1-7 วัน)</div>
                   </div>
                 </label>
               </div>
@@ -2924,10 +2924,10 @@ function escHtml(s){ return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&l
 function safeParseArr(v){ try { const a = JSON.parse(String(v || '[]')); return Array.isArray(a) ? a : []; } catch(e){ return []; } }
 // parse ค่า extension เป็น object อย่างปลอดภัย
 function safeParseObj(v){ try { const o = JSON.parse(String(v || '{}')); return (o && typeof o === 'object' && !Array.isArray(o)) ? o : {}; } catch(e){ return {}; } }
-function urgencyLabel(v){ return {low:'🟢 ต่ำ (7-30วัน)',medium:'🟡 ปานกลาง (2-7วัน)',high:'🔴 ด่วนมาก (1-2วัน)'}[v]||v; }
+function urgencyLabel(v){ return {low:'🟢 ต่ำ (15-30วัน)',medium:'🟡 ปานกลาง (8-14วัน)',high:'🔴 ด่วนมาก (1-7วัน)'}[v]||v; }
 
 // overdue: ยังไม่เสร็จ + เกินเวลาตามระดับความเร่งด่วน
-const OVERDUE_DAYS = { high: 2, medium: 7, low: 30 };
+const OVERDUE_DAYS = { high: 7, medium: 14, low: 30 };
 function isOverdue(t) {
   if (t.status === 'done') return false;
   const dl = deadlineMs(t);          // ใช้เส้นตายที่รวมการเลื่อนแล้ว
