@@ -1106,7 +1106,9 @@ function handleCredentialResponse(response) {
 
 function parseJwt(token) {
   const base64 = token.split('.')[1].replace(/-/g, '+').replace(/_/g, '/');
-  return JSON.parse(atob(base64));
+  // ถอดรหัสเป็น UTF-8 — ใช้ atob ตรงๆ จะทำให้ชื่อภาษาไทยเพี้ยน
+  const bytes = Uint8Array.from(atob(base64), c => c.charCodeAt(0));
+  return JSON.parse(new TextDecoder('utf-8').decode(bytes));
 }
 
 
@@ -1218,7 +1220,7 @@ async function loadAndRenderApp() {
     document.getElementById('tab-log').classList.add('flex');
   }
 
-  document.getElementById('f-name').value = currentUser.name;
+  // ชื่อผู้แจ้งให้กรอกเอง (เดิม auto-fill จาก Google แล้วภาษาไทยเพี้ยน)
   document.getElementById('f-email').value = currentUser.email;
 
   lucide.createIcons();
@@ -1744,7 +1746,7 @@ async function handleSubmit(event) {
   }
 
   event.target.reset();
-  document.getElementById('f-name').value = currentUser?.name || '';
+  document.getElementById('f-name').value = '';   // ให้กรอกชื่อเองทุกครั้ง
   document.getElementById('f-email').value = currentUser?.email || '';
   document.getElementById('f-device-id').value = '';
   imageDataURLs = [];
