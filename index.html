@@ -1298,19 +1298,6 @@ async function approveUser(email) {
   showToast('อนุมัติ ' + email + ' สำเร็จ', 'success');
 }
 
-async function setUserRole(email, role) {
-  const label = role === 'admin' ? 'ตั้งเป็น Admin' : 'ถอด Admin';
-  if (!confirm(label + ': ' + email + '?')) return;
-  await apiPost({ action: 'setRole', email, role });
-  const u = allUsers.find(u => u.email.toLowerCase() === email.toLowerCase());
-  if (u) u.role = role;
-  if (role === 'admin') { if (!dynamicAdmins.map(e=>e.toLowerCase()).includes(email.toLowerCase())) dynamicAdmins.push(email); }
-  else { dynamicAdmins = dynamicAdmins.filter(e => e.toLowerCase() !== email.toLowerCase()); }
-  renderUserConsole();
-  renderAdminList();
-  showToast(label + ' ' + email + ' สำเร็จ', 'success');
-}
-
 function handleSignOut() {
   if (!confirm('ต้องการออกจากระบบ?')) return;
   sessionStorage.removeItem('repair_user');
@@ -1998,16 +1985,6 @@ async function deleteTicket(id) {
   updateStats(); updateBadge(); renderAdminTickets(); renderUserTickets();
   showToast('ลบรายการแล้ว', 'error');
 }
-async function clearAllTickets() {
-  if (!confirm('ต้องการลบรายการทั้งหมด?')) return;
-  tickets.forEach(t => localStorage.removeItem('img_' + t.id));
-  tickets = [];
-  if (useSheets) await apiPost({ action: 'clear' });
-  else { try { localStorage.setItem('repair_tickets', JSON.stringify([])); } catch(e) {} }
-  updateStats(); updateBadge(); renderAdminTickets(); renderUserTickets();
-  showToast('ล้างข้อมูลทั้งหมดแล้ว', 'error');
-}
-
 async function refreshAdmin() {
   await loadTickets();
   updateStats(); renderAdminTickets(); renderUserTickets();
@@ -2282,12 +2259,6 @@ function completionMs(t) {
   const c = t.completedAt || t.updatedAt;
   return c ? new Date(c).getTime() : 0;
 }
-// ผลลัพธ์: 'onTime' | 'late' | 'pending'
-function ticketOutcome(t) {
-  if (t.status !== 'done') return 'pending';
-  return completionMs(t) <= deadlineMs(t) ? 'onTime' : 'late';
-}
-
 // ===== ประเมินสถานะ ณ "วันสิ้นสุดช่วงรายงาน" (cutoff) — ใช้เฉพาะในรายงาน =====
 // วันสิ้นสุดช่วง = report-to (สิ้นวัน) หรือถ้าไม่ระบุใช้ปัจจุบัน
 function reportCutoffMs() {
