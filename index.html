@@ -304,10 +304,10 @@
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-800 mb-2">🏢 สาขา <span class="text-red-500">*</span></label>
-              <input id="f-branch" type="text" required placeholder="พิมพ์เพื่อค้นหาสาขา..." list="branch-list"
-                autocomplete="off"
-                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all">
-              <datalist id="branch-list"></datalist>
+              <select id="f-branch" required
+                class="w-full border-2 border-gray-200 rounded-lg px-4 py-3 text-sm transition-all bg-white">
+                <option value="">-- เลือกสาขา --</option>
+              </select>
             </div>
             <div>
               <label class="block text-sm font-semibold text-gray-800 mb-2">📞 เบอร์ติดต่อ</label>
@@ -1829,7 +1829,7 @@ function renderAdminTickets() {
       (fStatus === 'active' ? t.status !== 'done' : (!fStatus || t.status === fStatus)) &&
       (!fUrgency || t.urgency === fUrgency) &&
       (!fCat     || t.category === fCat) &&
-      (!fBranches.length || fBranches.includes(t.branch)) &&
+      (!fBranches.length || fBranches.includes(t.branch) || !BRANCH_LIST.includes(t.branch)) &&
       (!fOverdue || isOverdue(t)) &&
       (!fromMs   || createdMs >= fromMs) &&
       (!toMs     || createdMs <= toMs)
@@ -2918,12 +2918,12 @@ function urgencyBorder(v){ return {low:'border-green-100',medium:'border-amber-2
 function formatDate(iso){ if(!iso) return ''; const d=new Date(iso); return d.toLocaleDateString('th-TH',{year:'numeric',month:'short',day:'numeric'})+' '+d.toLocaleTimeString('th-TH',{hour:'2-digit',minute:'2-digit'}); }
 
 document.addEventListener('DOMContentLoaded', () => {
-  // Populate datalist
-  const dl = document.getElementById('branch-list');
+  // Populate branch dropdown (เลือกเท่านั้น กันพิมพ์ผิด)
+  const fbSel = document.getElementById('f-branch');
   BRANCH_LIST.forEach(b => {
     const opt = document.createElement('option');
-    opt.value = b;
-    dl.appendChild(opt);
+    opt.value = b; opt.textContent = b;
+    fbSel.appendChild(opt);
   });
   // Populate branch filter checkboxes (grouped by zone with zone header checkboxes)
   const branchList = document.getElementById('branch-checkbox-list');
