@@ -1533,6 +1533,16 @@ function generateRepairReport(id) {
       </div>`).join('');
     })(),
   };
+  // ข้อมูลการเลื่อนกำหนด (ถ้ามี) — เพื่อแจ้งใน PDF ว่า due date เปลี่ยนจากเดิม
+  const extDays = extApprovedDays(t);
+  const bdlMs = baseDeadlineMs(t), edlMs = deadlineMs(t);
+  const baseDeadlineStr  = isFinite(bdlMs) ? formatDate(new Date(bdlMs).toISOString()) : '-';
+  const finalDeadlineStr = isFinite(edlMs) ? formatDate(new Date(edlMs).toISOString()) : '-';
+  const extInfo = t.extension || {};
+  const extReason     = escHtml(extInfo.reason || '');
+  const extApprovedBy = escHtml(extInfo.approvedBy || '');
+  const extApprovedAtStr = extInfo.approvedAt ? formatDate(extInfo.approvedAt) : '';
+
   const w = window.open('', '_blank', 'width=800,height=900');
   const completedDate = t.updatedAt ? formatDate(t.updatedAt) : '-';
   const imagesHtml = (t.images||[]).map(url =>
@@ -1611,6 +1621,8 @@ function generateRepairReport(id) {
     <div class="card">
       <h3>📅 วันที่</h3>
       <div class="row"><span class="lbl">วันที่แจ้ง:</span><span class="val">${formatDate(t.createdAt)}</span></div>
+      <div class="row"><span class="lbl">กำหนดเสร็จเดิม:</span><span class="val">${baseDeadlineStr}</span></div>
+      ${extDays > 0 ? `<div class="row"><span class="lbl">กำหนดเสร็จล่าสุด:</span><span class="val" style="color:#2563eb">${finalDeadlineStr} (+${extDays} วัน)</span></div>` : ''}
       <div class="row"><span class="lbl">วันที่เสร็จ:</span><span class="val">${completedDate}</span></div>
     </div>
     <div class="card">
@@ -1618,6 +1630,12 @@ function generateRepairReport(id) {
       <div class="row"><span class="lbl">สถานะ:</span><span class="val"><span class="badge status-done">✅ เสร็จสิ้น</span></span></div>
     </div>
   </div>
+  ${extDays > 0 ? `<div class="desc-box" style="background:#eff6ff;border-color:#bfdbfe;">
+    <h3 style="color:#1d4ed8">⏱️ มีการเลื่อนกำหนดเสร็จงาน</h3>
+    <p>เดิมกำหนดเสร็จ <b>${baseDeadlineStr}</b> → เลื่อนเป็น <b>${finalDeadlineStr}</b> (เลื่อนไป +${extDays} วัน)</p>
+    ${extReason ? `<p style="margin-top:4px">เหตุผล: ${extReason}</p>` : ''}
+    ${extApprovedBy ? `<p style="margin-top:4px;font-size:11px;color:#6b7280">อนุมัติโดย ${extApprovedBy}${extApprovedAtStr ? ' เมื่อ ' + extApprovedAtStr : ''}</p>` : ''}
+  </div>` : ''}
   <div class="desc-box">
     <h3>📝 รายละเอียดปัญหา</h3>
     <p>${s.desc}</p>
