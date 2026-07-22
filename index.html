@@ -836,6 +836,21 @@
       </div>
     </div>
 
+    <!-- Overdue tickets report (real-time, ไม่ผูกกับช่วงวันที่ด้านบน) -->
+    <div class="bg-red-50 rounded-xl shadow border-2 border-red-200 p-4 mb-4">
+      <div class="flex items-center justify-between flex-wrap gap-2 mb-2">
+        <h3 class="text-base font-bold text-red-700 flex items-center gap-2">
+          <i data-lucide="alarm-clock" style="width:18px;height:18px;color:#dc2626;"></i>
+          รายงานงานเกินกำหนด (<span id="overdue-count">0</span> รายการ ณ ตอนนี้)
+        </h3>
+        <button onclick="exportOverdueCSV()" class="flex items-center gap-2 text-xs bg-red-600 hover:bg-red-700 text-white px-3 py-2 rounded-lg transition-all font-medium">
+          <i data-lucide="download" style="width:14px;height:14px;"></i> ดาวน์โหลดรายงานเกินกำหนด
+        </button>
+      </div>
+      <p class="text-xs text-red-500 mb-2">* งานที่ยังไม่เสร็จและเลยกำหนดแล้ว ณ ปัจจุบัน — ไม่ผูกกับ "ตั้งแต่วันที่/ถึงวันที่" ด้านบน แต่กรองตามโซน/สาขา/หมวดหมู่/ความเร่งด่วนได้</p>
+      <div id="overdue-report-table"></div>
+    </div>
+
     <!-- Breakdown table -->
     <div id="report-breakdown"></div>
 
@@ -2390,6 +2405,9 @@ function renderReport() {
   // ค่าตอบแทน
   renderCompensation(list, cut);
 
+  // รายงานงานเกินกำหนด (real-time, กรองตามโซน/สาขา/หมวด/ความเร่งด่วนเดียวกัน)
+  renderOverdueReport();
+
   // detail table (แสดงเสมอ — ดูรายงานบนเว็บได้เลยไม่ต้อง export)
   renderReportDetail(list);
 
@@ -2571,6 +2589,81 @@ function exportReportCSV() {
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   URL.revokeObjectURL(a.href);
   showToast('ดาวน์โหลดรายงานแล้ว', 'success');
+}
+
+// ===== รายงานงานเกินกำหนด (real-time — ไม่ผูกกับช่วงวันที่ของรายงาน) =====
+// ใช้ isOverdue (ปัจจุบันจริง) ไม่ใช่ isOverdueAt(cutoff) เพราะเป็นลิสต์งานที่ต้องรีบทำ ณ ตอนนี้
+function getOverdueTickets() {
+  const fZone = document.getElementById('report-zone').value;
+  const fBranch = document.getElementById('report-branch').value;
+  const fCat = document.getElementById('report-category').value;
+  const fUrg = document.getElementById('report-urgency').value;
+  return tickets.filter(t => {
+    if (!isOverdue(t)) return false;
+    if (fZone && !zonesOfBranch(t.branch).includes(fZone)) return false;
+    if (fBranch && t.branch !== fBranch) return false;
+    if (fCat && t.category !== fCat) return false;
+    if (fUrg && t.urgency !== fUrg) return false;
+    return true;
+  }).sort((a, b) => deadlineMs(a) - deadlineMs(b)); // เกินมานานสุดก่อน
+}
+function daysOverdue(t) { return Math.floor((Date.now() - deadlineMs(t)) / 86400000); }
+function renderOverdueReport() {
+  const list = getOverdueTickets();
+  document.getElementById('overdue-count').textContent = list.length;
+  const cont = document.getElementById('overdue-report-table');
+  if (!list.length) {
+    cont.innerHTML = '<div class="bg-white rounded-lg border border-red-100 text-center py-8 text-gray-400 text-sm">🎉 ไม่มีงานเกินกำหนด</div>';
+    return;
+  }
+  const rows = list.map(t => `<tr class="border-t border-red-100 hover:bg-red-50">
+    <td class="px-3 py-2 text-sm text-gray-700 whitespace-nowrap">🏢 ${escHtml(t.branch)}</td>
+    <td class="px-3 py-2 text-sm text-gray-800">${escHtml(t.equip)}${t.deviceId ? `<span class="text-xs text-gray-400"> · ${escHtml(t.deviceId)}</span>` : ''}</td>
+    <td class="px-3 py-2 text-xs whitespace-nowrap"><span class="px-2 py-0.5 rounded-full font-medium urgency-${t.urgency}">${urgencyLabel(t.urgency)}</span></td>
+    <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">${formatDate(t.createdAt)}</td>
+    <td class="px-3 py-2 text-xs text-gray-500 whitespace-nowrap">${formatDate(new Date(deadlineMs(t)).toISOString())}</td>
+    <td class="px-3 py-2 whitespace-nowrap"><span class="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">🚨 ${daysOverdue(t)} วัน</span></td>
+    <td class="px-3 py-2 text-xs whitespace-nowrap"><span class="px-2 py-0.5 rounded-full font-medium status-${t.status}">${statusLabel(t.status)}</span></td>
+    <td class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">${escHtml(t.name)}${t.phone ? `<br><span class="text-gray-400">${escHtml(t.phone)}</span>` : ''}</td>
+    <td class="px-3 py-2 text-xs text-gray-500 max-w-[160px] truncate" title="${escHtml(t.note||'')}">${escHtml(t.note || '-')}</td>
+  </tr>`).join('');
+  cont.innerHTML = `
+    <div class="bg-white rounded-lg border border-red-100 overflow-x-auto">
+      <table class="w-full min-w-[900px]">
+        <thead><tr class="bg-red-100/60 text-xs text-red-700 text-left">
+          <th class="px-3 py-2 font-semibold">สาขา</th>
+          <th class="px-3 py-2 font-semibold">อุปกรณ์</th>
+          <th class="px-3 py-2 font-semibold">ความเร่งด่วน</th>
+          <th class="px-3 py-2 font-semibold">วันที่แจ้ง</th>
+          <th class="px-3 py-2 font-semibold">เส้นตาย</th>
+          <th class="px-3 py-2 font-semibold">เกินมา</th>
+          <th class="px-3 py-2 font-semibold">สถานะ</th>
+          <th class="px-3 py-2 font-semibold">ผู้แจ้ง</th>
+          <th class="px-3 py-2 font-semibold">หมายเหตุล่าสุด</th>
+        </tr></thead>
+        <tbody>${rows}</tbody>
+      </table>
+    </div>`;
+  lucideIn(cont);
+}
+function exportOverdueCSV() {
+  const list = getOverdueTickets();
+  const esc = v => `"${String(v==null?'':v).replace(/"/g,'""')}"`;
+  const header = ['id','สาขา','โซน','อุปกรณ์','รหัสอุปกรณ์','หมวดหมู่','ความเร่งด่วน','สถานะ','วันที่แจ้ง','เส้นตาย','เกินมา(วัน)','ผู้แจ้ง','เบอร์ติดต่อ','หมายเหตุล่าสุด'];
+  const lines = list.map(t => [
+    t.id, t.branch, zonesOfBranch(t.branch).join(' / '), t.equip, t.deviceId || '',
+    categoryLabel(t.category), urgencyLabel(t.urgency), statusLabel(t.status),
+    formatDate(t.createdAt), formatDate(new Date(deadlineMs(t)).toISOString()), daysOverdue(t),
+    t.name || '', t.phone || '', t.note || ''
+  ].map(esc).join(','));
+  const csv = '﻿' + [header.map(esc).join(','), ...lines].join('\r\n');
+  const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `รายงานเกินกำหนด_${toDateInput(new Date())}.csv`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(a.href);
+  showToast(list.length ? 'ดาวน์โหลดรายงานเกินกำหนดแล้ว' : 'ไม่มีงานเกินกำหนด — ดาวน์โหลดไฟล์เปล่าแล้ว', 'success');
 }
 
 // ==================== Log Console (Super Admin) ====================
