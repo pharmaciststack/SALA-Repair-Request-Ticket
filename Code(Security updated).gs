@@ -51,9 +51,9 @@ function doGet(e) {
   if (action === 'ping') {
     return json({
       ok: true,
-      version: '5.0',                       // ← เวอร์ชันใหม่: ถ้าเห็น 5.0 = deploy โค้ดใหม่สำเร็จ
+      version: '5.1',                       // ← เวอร์ชันใหม่: ถ้าเห็น 5.1 = deploy โค้ดใหม่สำเร็จ (มีอีเมลแจ้งขอเลื่อนกำหนด)
       allowedFields: ALLOWED_UPDATE_FIELDS,  // ต้องมี proofImages / completedAt-ready
-      features: ['proofImages', 'extension', 'logs', 'completedAt'],
+      features: ['proofImages', 'extension', 'logs', 'completedAt', 'extensionEmail'],
       time: new Date().toISOString()
     });
   }
@@ -251,6 +251,12 @@ function doPost(e) {
         const cu = col('updatedAt');
         if (cu > 0) sheet.getRange(i + 1, cu).setValue(new Date().toISOString());
         logAction(callerEmail, 'ขอเลื่อน deadline', body.id, ticketLabelFromRow(rows[i], headers), '+' + days + ' วัน: ' + String(body.reason || ''));
+        // แจ้งอีเมลผู้แจ้งซ่อมว่ามีคำขอเลื่อนกำหนดรออนุมัติ
+        try {
+          const tObj = {};
+          headers.forEach((k, idx) => { tObj[k] = rows[i][idx]; });
+          sendExtensionRequestNotification(tObj, ext);
+        } catch (err) {}
         return json({ ok: true, extension: ext });
       }
     }
@@ -495,6 +501,44 @@ function sendCompletionNotification(t) {
   }
 }
 
+// แจ้งผู้แจ้งซ่อมเมื่อมีคำขอเลื่อนกำหนดเสร็จงาน (ต้องเข้าระบบไปอนุมัติ/ปฏิเสธเอง)
+function sendExtensionRequestNotification(t, ext) {
+  const reqEmail = String(t.email || '').trim();
+  if (!reqEmail) return;
+  const ticketId = '#' + String(t.id).slice(-8);
+  const equip  = escHtml(t.equip || '');
+  const branch = escHtml(t.branch || '');
+  const name   = escHtml(t.name || '');
+  const reqBy  = escHtml(ext.reqBy || '');
+  const reason = escHtml(ext.reason || '');
+  const days   = Number(ext.reqDays) || 0;
+  const subject = `⏱️ [ขอเลื่อนกำหนดซ่อม] ${equip} — สาขา ${branch} ${ticketId}`;
+  const body = `<div style="font-family:Arial,sans-serif;max-width:600px;margin:0 auto">
+  <div style="background:#2563eb;color:#fff;padding:16px 24px;border-radius:8px 8px 0 0">
+    <h2 style="margin:0;font-size:18px">⏱️ มีคำขอเลื่อนกำหนดเสร็จงาน</h2>
+    <p style="margin:4px 0 0;font-size:12px;opacity:.85">${COMPANY} · ${SYSTEM_NAME}</p>
+  </div>
+  <div style="background:#fff;border:1px solid #e5e7eb;border-top:none;padding:24px;border-radius:0 0 8px 8px">
+    <p style="font-size:14px;color:#374151">เรียน คุณ${name}</p>
+    <p style="font-size:14px;color:#374151">ทีมช่างขอเลื่อนกำหนดเสร็จของงานซ่อมที่คุณแจ้งไว้ กรุณาเข้าระบบเพื่อ<b>อนุมัติหรือปฏิเสธ</b>คำขอนี้</p>
+    <table style="width:100%;border-collapse:collapse;font-size:14px;margin:16px 0">
+      <tr><td style="padding:6px 0;color:#6b7280;width:130px">เลขที่ Ticket</td><td style="padding:6px 0;font-weight:600">${ticketId}</td></tr>
+      <tr><td style="padding:6px 0;color:#6b7280">อุปกรณ์</td><td style="padding:6px 0;font-weight:600">${equip}</td></tr>
+      <tr><td style="padding:6px 0;color:#6b7280">สาขา</td><td style="padding:6px 0">${branch}</td></tr>
+      <tr><td style="padding:6px 0;color:#6b7280">ขอเลื่อนเพิ่ม</td><td style="padding:6px 0;font-weight:700;color:#2563eb">+${days} วัน</td></tr>
+      ${reqBy ? `<tr><td style="padding:6px 0;color:#6b7280">ผู้ขอ</td><td style="padding:6px 0">${reqBy}</td></tr>` : ''}
+    </table>
+    ${reason ? `<div style="background:#eff6ff;border:1px solid #bfdbfe;border-radius:6px;padding:12px;margin:16px 0">
+      <p style="margin:0 0 4px;font-size:12px;color:#1d4ed8;font-weight:600">เหตุผลที่ขอเลื่อน</p>
+      <p style="margin:0;font-size:14px;color:#1e3a8a">${reason}</p>
+    </div>` : ''}
+    <a href="${SYSTEM_URL}" style="display:inline-block;background:#2563eb;color:#fff;padding:10px 24px;border-radius:6px;text-decoration:none;font-weight:600;font-size:14px">เข้าระบบเพื่ออนุมัติ/ปฏิเสธ →</a>
+  </div>
+  <p style="text-align:center;font-size:11px;color:#9ca3af;margin-top:12px">อีเมลนี้ส่งอัตโนมัติจากระบบแจ้งซ่อมบำรุง ${COMPANY}</p>
+</div>`;
+  MailApp.sendEmail({ to: reqEmail, subject, htmlBody: body });
+}
+
 // ── Image Upload ──────────────────────────────────────
 function uploadImageToDrive(base64, filename, mimeType) {
   const folder = getOrCreateFolder('RepairTicketImages');
@@ -572,6 +616,10 @@ function ticketLabelFromRow(row, headers) {
 }
 function statusThai(v) {
   return { waiting: 'รอดำเนินการ', progress: 'กำลังดำเนินการ', done: 'เสร็จสิ้น' }[v] || v;
+}
+// ป้องกัน HTML injection เวลาแทรกข้อความที่ผู้ใช้กรอกเอง (เช่น เหตุผลขอเลื่อน) ลงในอีเมล
+function escHtml(s) {
+  return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
 }
 
 function json(data) {
