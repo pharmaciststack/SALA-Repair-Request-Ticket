@@ -1524,7 +1524,14 @@ function generateRepairReport(id) {
     equip:    escHtml(t.equip    || '-'),
     deviceId: escHtml(t.deviceId || ''),
     desc:     escHtml(t.desc     || '-').replace(/\n/g, '<br>'),
-    note:     escHtml(t.note     || 'ไม่มีหมายเหตุ').replace(/\n/g, '<br>'),
+    note:     (() => {
+      const entries = parseNoteEntries(t.note);
+      if (!entries.length) return '<p>ไม่มีหมายเหตุ</p>';
+      return entries.map(e => `<div style="margin-bottom:8px;padding-bottom:8px;border-bottom:1px solid #dbeafe;">
+        ${e.time ? `<p style="font-size:10px;color:#3b82f6;font-weight:700;margin-bottom:2px;">🕐 ${escHtml(e.time)}${e.actor ? ' · ' + escHtml(e.actor) : ''}</p>` : ''}
+        <p>${escHtml(e.text).replace(/\n/g,'<br>')}</p>
+      </div>`).join('');
+    })(),
   };
   const w = window.open('', '_blank', 'width=800,height=900');
   const completedDate = t.updatedAt ? formatDate(t.updatedAt) : '-';
@@ -1618,7 +1625,7 @@ function generateRepairReport(id) {
   ${imagesHtml ? `<div class="desc-box"><h3>📸 รูปภาพประกอบ</h3><div class="images">${imagesHtml}</div></div>` : ''}
   <div class="note-box">
     <h3>💬 หมายเหตุช่าง / วิธีแก้ไข</h3>
-    <p>${s.note}</p>
+    ${s.note}
   </div>
   <div class="sig-grid">
     <div class="sig-box"><div class="sig-line"></div><div class="sig-name">ลายเซ็นผู้แจ้ง<br>(${s.name})</div></div>
@@ -1806,7 +1813,7 @@ function renderUserTickets() {
         <span class="text-xs text-gray-400 whitespace-nowrap">#${String(t.id).slice(-5)}</span>
       </div>
       <p class="text-sm text-gray-700 mt-2 line-clamp-2">${escHtml(t.desc)}</p>
-      ${t.note ? `<p class="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">💬 หมายเหตุช่าง: ${escHtml(t.note)}</p>` : ''}
+      ${t.note ? `<p class="text-xs text-blue-600 mt-2 bg-blue-50 rounded-lg px-3 py-2">💬 หมายเหตุล่าสุดจากช่าง: ${escHtml(latestNoteText(t.note))}</p>` : ''}
       ${t.images?.length ? `<div class="flex gap-2 mt-3 flex-wrap">${t.images.slice(0,3).map(img =>
         `<img src="${escHtml(img)}" class="h-14 w-20 object-cover rounded-lg border-2 border-gray-200 cursor-pointer" data-src="${escHtml(img)}" onclick="openImgModal(this.dataset.src)" onerror="this.style.display='none'">`).join('')}</div>` : ''}
       ${t.proofImages?.length ? `<p class="text-xs text-green-600 mt-3 mb-1 font-medium">✅ รูปหลักฐานการปิดงาน</p>
@@ -1930,12 +1937,13 @@ function renderAdminTickets() {
           </button>`}
         </div>
         <div class="flex-1">
-          <label class="text-xs font-semibold text-gray-600 mb-1 block">💬 หมายเหตุช่าง</label>
-          <textarea id="note-${t.id}" rows="4" placeholder="เพิ่มหมายเหตุ..."
+          <label class="text-xs font-semibold text-gray-600 mb-1 block">💬 หมายเหตุช่าง (บันทึกสะสมทุกครั้ง)</label>
+          ${renderNoteThread(t.note)}
+          <textarea id="note-${t.id}" rows="2" placeholder="พิมพ์ความคิดเห็นใหม่..."
             class="w-full border-2 border-gray-200 rounded-lg px-3 py-2 text-sm transition-all mb-2 resize-y"
-            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();saveNote(${t.id})}">${escHtml(t.note||'')}</textarea>
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();saveNote(${t.id})}"></textarea>
           <button onclick="saveNote(${t.id})"
-            class="w-full bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all">💾 บันทึกหมายเหตุ</button>
+            class="w-full bg-blue-500 hover:bg-blue-600 text-white px-3 py-2 rounded-lg text-sm font-medium transition-all">💬 เพิ่มความคิดเห็น</button>
         </div>
         <div class="flex sm:flex-col gap-2 shrink-0 sm:self-end">
           <button onclick="openProofModal(${t.id})"
@@ -1990,19 +1998,67 @@ function reopenJob(id) {
   if (!confirm('เปิดงานนี้กลับมาดำเนินการใหม่?')) return;
   updateStatus(id, 'progress');
 }
+
+// ===== หมายเหตุช่างแบบสะสม (comment thread) — เก็บทุกคอมเมนต์ใน field `note` เดิม =====
+// ต่อท้ายด้วยตัวคั่นที่ไม่น่าชนกับข้อความจริง จึงไม่ต้องเพิ่มคอลัมน์/แก้ Apps Script
+const NOTE_SEP = '\n\n────────\n';
+function noteEntryHeader(actor) {
+  const d = new Date();
+  const time = d.toLocaleDateString('th-TH', { day:'numeric', month:'short', year:'numeric' })
+    + ' ' + d.toLocaleTimeString('th-TH', { hour:'2-digit', minute:'2-digit' });
+  return `🕐 ${time} · ${actor || 'ไม่ระบุ'}`;
+}
+// แยก note ที่เก็บสะสมไว้กลับเป็นรายการคอมเมนต์ {time, actor, text}
+// note เก่าที่บันทึกไว้ก่อนอัปเดตนี้ (ไม่มี header) จะถูกมองเป็นคอมเมนต์เดียว ไม่เสียข้อมูล
+function parseNoteEntries(note) {
+  if (!note) return [];
+  return String(note).split(NOTE_SEP).map(chunk => {
+    const nl = chunk.indexOf('\n');
+    const headerLine = nl === -1 ? '' : chunk.slice(0, nl);
+    const m = headerLine.match(/^🕐 (.+?) · (.+)$/);
+    if (m) return { time: m[1], actor: m[2], text: chunk.slice(nl + 1) };
+    return { time: '', actor: '', text: chunk }; // legacy note ก่อนมี thread
+  }).filter(e => e.text.trim().length);
+}
+function appendNoteEntry(existingNote, text, actor) {
+  const entry = noteEntryHeader(actor) + '\n' + text;
+  return existingNote ? (existingNote + NOTE_SEP + entry) : entry;
+}
+function latestNoteText(note) {
+  const entries = parseNoteEntries(note);
+  return entries.length ? entries[entries.length - 1].text : '';
+}
+// รายการคอมเมนต์ทั้งหมด ใหม่สุดอยู่บน — ใช้ในการ์ด admin
+function renderNoteThread(note) {
+  const entries = parseNoteEntries(note);
+  if (!entries.length) return '<p class="text-xs text-gray-400 italic mb-2">ยังไม่มีความคิดเห็น</p>';
+  const items = entries.slice().reverse().map(e => `
+    <div class="border-b border-gray-100 last:border-0 py-1.5">
+      ${e.time ? `<p class="text-[10px] text-gray-400 font-medium mb-0.5">🕐 ${escHtml(e.time)}${e.actor ? ' · ' + escHtml(e.actor) : ''}</p>` : ''}
+      <p class="text-xs text-gray-700 whitespace-pre-wrap">${escHtml(e.text)}</p>
+    </div>`).join('');
+  return `<div class="max-h-36 overflow-y-auto bg-gray-50 border border-gray-200 rounded-lg px-3 py-1 mb-2 scroll-area">${items}</div>`;
+}
 async function saveNote(id) {
   const t = tickets.find(t => t.id === id); if (!t) return;
-  t.note = document.getElementById('note-'+id)?.value?.trim() || '';
+  const input = document.getElementById('note-'+id);
+  const text = input?.value?.trim();
+  if (!text) { showToast('กรุณาพิมพ์ข้อความก่อนบันทึก', 'error'); return; }
+  const actor = currentUser?.name || currentUser?.email || '';
+  const combined = appendNoteEntry(t.note, text, actor);
+  t.note = combined;
   t.updatedAt = new Date().toISOString();
-  // แสดงผลทันที แล้วยิง API เบื้องหลัง
+  // แสดงผลทันที (re-render ล้าง textarea ให้เองเพราะไม่ prefill ค่าเดิมแล้ว) แล้วยิง API เบื้องหลัง
+  renderAdminTickets();
   renderUserTickets();
   if (useSheets) {
-    apiPost({ action: 'update', id, field: 'note', value: t.note })
-      .then(() => showToast('บันทึกหมายเหตุแล้ว', 'success'))
+    // ส่ง note ฉบับเต็ม (สะสมทุกคอมเมนต์) ไปทับ field เดิมใน Sheet — ใช้ action/field เดิม ไม่ต้องแก้ Apps Script
+    apiPost({ action: 'update', id, field: 'note', value: combined })
+      .then(() => showToast('เพิ่มความคิดเห็นแล้ว', 'success'))
       .catch(() => showToast('บันทึกไม่สำเร็จ กรุณารีเฟรช', 'error'));
   } else {
     try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {}
-    showToast('บันทึกหมายเหตุแล้ว', 'success');
+    showToast('เพิ่มความคิดเห็นแล้ว', 'success');
   }
 }
 async function deleteTicket(id) {
@@ -2243,14 +2299,16 @@ async function confirmSelfClose() {
   const t = tickets.find(t => t.id === _selfCloseId);
   if (!t) { cancelSelfClose(); return; }
 
+  const actor = (currentUser?.name || currentUser?.email || '') + ' (ปิดคำขอเอง)';
+  const combined = appendNoteEntry(t.note, note, actor);
   t.status = 'done';
-  t.note = note;
+  t.note = combined;
   t.updatedAt = new Date().toISOString();
 
   if (useSheets) {
     setLoading(true);
     await apiPost({ action: 'update', id: _selfCloseId, field: 'status', value: 'done' });
-    await apiPost({ action: 'update', id: _selfCloseId, field: 'note', value: note });
+    await apiPost({ action: 'update', id: _selfCloseId, field: 'note', value: combined });
     setLoading(false);
   } else {
     try { localStorage.setItem('repair_tickets', JSON.stringify(tickets)); } catch(e) {}
@@ -2625,7 +2683,7 @@ function renderOverdueReport() {
     <td class="px-3 py-2 whitespace-nowrap"><span class="text-xs font-bold bg-red-600 text-white px-2 py-0.5 rounded-full">🚨 ${daysOverdue(t)} วัน</span></td>
     <td class="px-3 py-2 text-xs whitespace-nowrap"><span class="px-2 py-0.5 rounded-full font-medium status-${t.status}">${statusLabel(t.status)}</span></td>
     <td class="px-3 py-2 text-xs text-gray-600 whitespace-nowrap">${escHtml(t.name)}${t.phone ? `<br><span class="text-gray-400">${escHtml(t.phone)}</span>` : ''}</td>
-    <td class="px-3 py-2 text-xs text-gray-500 max-w-[160px] truncate" title="${escHtml(t.note||'')}">${escHtml(t.note || '-')}</td>
+    <td class="px-3 py-2 text-xs text-gray-500 max-w-[160px] truncate" title="${escHtml(latestNoteText(t.note))}">${escHtml(latestNoteText(t.note) || '-')}</td>
   </tr>`).join('');
   cont.innerHTML = `
     <div class="bg-white rounded-lg border border-red-100 overflow-x-auto">
@@ -2654,7 +2712,7 @@ function exportOverdueCSV() {
     t.id, t.branch, zonesOfBranch(t.branch).join(' / '), t.equip, t.deviceId || '',
     categoryLabel(t.category), urgencyLabel(t.urgency), statusLabel(t.status),
     formatDate(t.createdAt), formatDate(new Date(deadlineMs(t)).toISOString()), daysOverdue(t),
-    t.name || '', t.phone || '', t.note || ''
+    t.name || '', t.phone || '', latestNoteText(t.note) || ''
   ].map(esc).join(','));
   const csv = '﻿' + [header.map(esc).join(','), ...lines].join('\r\n');
   const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
